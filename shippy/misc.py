@@ -3,18 +3,18 @@ Miscellaneous utility functions.
 """
 
 import os
+import io
 import tempfile
 import subprocess
 import urllib.request
-
-from PIL import Image
 
 
 def grab_png_from_url(url: str):
     """Grab a PNG image from a URL"""
     with tempfile.NamedTemporaryFile(suffix='.png') as tmpfile:
         urllib.request.urlretrieve(url, tmpfile.name)
-        return Image.open(tmpfile.name)
+        with open(tmpfile.name, 'rb') as imgfile:
+            return io.BytesIO(imgfile.read())
 
 
 def _show_image_posix(filename: str):
@@ -32,8 +32,6 @@ def show_image(img):
 
     viewers = {'posix': _show_image_posix, 'nt': _show_image_nt}
     with tempfile.NamedTemporaryFile(suffix='.png') as tmpfile:
-        img.save(tmpfile.name)
-        try:
-            viewers[os.name](tmpfile.name)
-        except KeyError:
-            img.show()
+        with open(tmpfile.name, 'wb') as imgfile:
+            imgfile.write(img.getbuffer())
+        viewers[os.name](tmpfile.name)
