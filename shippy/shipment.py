@@ -14,6 +14,7 @@ class Builder:
 
     def _address_from_dict(self, dict_):
         """Convert a dict to an address."""
+        dict_ = dict(dict_)
         dict_['zip'] = dict_.pop('zipcode')
         dict_['country'] = 'US'
         dict_['phone'] = ''
