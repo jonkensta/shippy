@@ -65,6 +65,7 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
 
     with task_message("Grabbing return address from IBP server"):
         from_addr = server.return_address()
+        from_addr['name'] = from_addr.pop('addressee')
 
     if args.ship_bulk:
         with task_message("Grabbing units list from IBP server"):
