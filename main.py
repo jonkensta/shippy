@@ -4,16 +4,33 @@ The main application.
 
 import argparse
 import traceback
+import functools
 import contextlib
 import configparser
 import pkg_resources
 
-from . import console
-from .server import Server, ServerMock
-from .misc import grab_png_from_url, print_image
-from .shipment import Builder as ShipmentBuilder
+from shippy import console
+from shippy.server import Server, ServerMock
+from shippy.misc import grab_png_from_url, print_image
+from shippy.shipment import Builder as ShipmentBuilder
 
 
+def catch_error(func):
+    """Given user an opportunity to see an error before main closes"""
+
+    @functools.wraps
+    def inner(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as exc:  # pylint: disable=broad-except
+            print(f"Error: {exc}")
+            traceback.print_exc()
+            input("Hit any key to close")
+
+    return inner
+
+
+@catch_error
 def main():  # pylint: disable=too-many-locals, too-many-statements
     """Ship to an inmate or a unit"""
 
@@ -104,12 +121,3 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
             with task_message("Requesting refund"):
                 shipment.refund()
             raise
-
-
-if __name__ == '__main__':
-    try:
-        main()
-    except Exception as exc:  # pylint: disable=broad-except
-        print(f"Error: {exc}")
-        traceback.print_exc()
-        input("Hit any key to close")
