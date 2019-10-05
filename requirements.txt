@@ -1,4 +1,6 @@
 mypy
 pylint
+pillow
+pywin32
 requests
 easypost

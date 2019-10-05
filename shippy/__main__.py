@@ -10,7 +10,7 @@ import pkg_resources
 
 from . import console
 from .server import Server, ServerMock
-from .misc import grab_png_from_url, show_image
+from .misc import grab_png_from_url, print_image
 from .shipment import Builder as ShipmentBuilder
 
 
@@ -98,7 +98,7 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
             with task_message("Printing postage"):
                 label_url = shipment.postage_label.label_url
                 image = grab_png_from_url(label_url)
-                show_image(image)
+                print_image(image)
 
         except Exception:
             with task_message("Requesting refund"):
