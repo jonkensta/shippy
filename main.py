@@ -15,22 +15,23 @@ from shippy.misc import grab_png_from_url, print_image
 from shippy.shipment import Builder as ShipmentBuilder
 
 
-def catch_error(func):
+def catch_and_print_error(func):
     """Given user an opportunity to see an error before main closes"""
 
-    @functools.wraps
+    @functools.wraps(func)
     def inner(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             print(f"Error: {exc}")
             traceback.print_exc()
             input("Hit any key to close")
+            raise
 
     return inner
 
 
-@catch_error
+@catch_and_print_error
 def main():  # pylint: disable=too-many-locals, too-many-statements
     """Ship to an inmate or a unit"""
 
