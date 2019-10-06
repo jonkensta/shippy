@@ -91,8 +91,7 @@ def print_image(img, printer=win32print.GetDefaultPrinter()):
         ratios = [printable_w / img.size[0], printable_h / img.size[1]]
         scale = min(ratios)
 
-        # Start the print job, and draw the bitmap to
-        #  the printer device at the scaled size.
+        # Start print job, draw the bitmap to printer at scaled size.
         with create_job('postage_label'):
             dib = ImageWin.Dib(img)
 
