@@ -28,7 +28,9 @@ def grab_png_from_url(url: str):
 
     with build_tempfile(suffix='.png') as tmpfile:
         urllib.request.urlretrieve(url, tmpfile.name)
-        return Image.open(tmpfile.name)
+        img = Image.open(tmpfile.name)
+        img.load()
+        return img
 
 
 def print_image(img, printer=win32print.GetDefaultPrinter()):
