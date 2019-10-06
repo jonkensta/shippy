@@ -122,3 +122,7 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
             with task_message("Requesting refund"):
                 shipment.refund()
             raise
+
+
+if __name__ == '__main__':
+    main()
