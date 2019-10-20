@@ -9,9 +9,12 @@ import contextlib
 import configparser
 import pkg_resources
 
+from PIL import Image
+
 from shippy import console
+from shippy.misc import grab_png_from_url
 from shippy.server import Server, ServerMock
-from shippy.misc import grab_png_from_url, print_image
+from shippy.printing import print_image
 from shippy.shipment import Builder as ShipmentBuilder
 
 
@@ -22,11 +25,10 @@ def catch_and_print_error(func):
     def inner(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except Exception as exc:
-            print(f"Error: {exc}")
+        except Exception as exc:  # pylint: disable=broad-except
             traceback.print_exc()
+            print(f"Error: {exc}")
             input("Hit any key to close")
-            raise
 
     return inner
 
@@ -53,6 +55,12 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
 
     args = parser.parse_args()
 
+    try:
+        args.ship_bulk
+    except AttributeError as error:
+        msg = "Shipping type (i.e. bulk or individual) must be specified"
+        raise ValueError(msg) from error
+
     if args.configpath is not None:
         configpath = args.configpath
     else:
@@ -69,6 +77,8 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
     else:
         url, apikey = config['ibp']['url'], config['ibp']['apikey']
         server = Server(url, apikey)
+
+    logo = Image.open(config['ibp']['logo'])
 
     @contextlib.contextmanager
     def task_message(msg):
@@ -116,6 +126,10 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
             with task_message("Printing postage"):
                 label_url = shipment.postage_label.label_url
                 image = grab_png_from_url(label_url)
+
+                # Pasted logo position chosen through trial and error.
+                image.paste(logo, (450, 425))
+
                 print_image(image)
 
         except Exception:
