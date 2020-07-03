@@ -69,7 +69,7 @@ def print_image(img, printer=win32print.GetDefaultPrinter(), **kwargs):
         scale = min(ratios)
 
         # Start print job, draw the bitmap to printer at scaled size.
-        with create_job('postage_label'):
+        with create_job("postage_label"):
             dib = ImageWin.Dib(img)
 
             total_w, total_h = get_total_area()

@@ -12,7 +12,7 @@ from PIL import Image
 
 @contextlib.contextmanager
 def build_tempfile(*args, **kwargs):
-    """Build a tempfile without opening it"""
+    """Build a tempfile without opening it."""
     try:
         tmp = tempfile.NamedTemporaryFile(*args, **kwargs, delete=False)
         tmp.close()
@@ -22,9 +22,9 @@ def build_tempfile(*args, **kwargs):
 
 
 def grab_png_from_url(url: str):
-    """Grab a PNG image from a URL"""
+    """Grab a PNG image from a URL."""
 
-    with build_tempfile(suffix='.png') as tmpfile:
+    with build_tempfile(suffix=".png") as tmpfile:
         urllib.request.urlretrieve(url, tmpfile.name)
         img = Image.open(tmpfile.name)
         img.load()

@@ -19,7 +19,7 @@ from shippy.shipment import Builder as ShipmentBuilder
 
 
 def catch_and_print_error(func):
-    """Given user an opportunity to see an error before main closes"""
+    """Given user an opportunity to see an error before main closes."""
 
     @functools.wraps(func)
     def inner(*args, **kwargs):
@@ -35,22 +35,18 @@ def catch_and_print_error(func):
 
 @catch_and_print_error
 def main():  # pylint: disable=too-many-locals, too-many-statements
-    """Ship to an inmate or a unit"""
-
+    """Ship to an inmate or a unit."""
     parser = argparse.ArgumentParser(description=main.__doc__)
-    parser.add_argument('--configpath', type=str, default=None)
+
+    parser.add_argument("--configpath", type=str, default=None)
 
     subparsers = parser.add_subparsers()
     parsers = [None, None]
 
-    parsers[0] = subparsers.add_parser(
-        'individual', help="ship individual packages"
-    )
+    parsers[0] = subparsers.add_parser("individual", help="ship individual packages")
     parsers[0].set_defaults(ship_bulk=False)
 
-    parsers[1] = subparsers.add_parser(
-        'bulk', help="ship bulk packages"
-    )
+    parsers[1] = subparsers.add_parser("bulk", help="ship bulk packages")
     parsers[1].set_defaults(ship_bulk=True)
 
     args = parser.parse_args()
@@ -64,26 +60,26 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
     if args.configpath is not None:
         configpath = args.configpath
     else:
-        configpath = pkg_resources.resource_filename(__name__, 'config.ini')
+        configpath = pkg_resources.resource_filename(__name__, "config.ini")
 
     config = configparser.ConfigParser()
     config.read(configpath)
 
-    build_shipment = ShipmentBuilder(config['easypost']['apikey'])
+    build_shipment = ShipmentBuilder(config["easypost"]["apikey"])
 
-    if bool(int(config['ibp']['testing'])):
+    if bool(int(config["ibp"]["testing"])):
         server = ServerMock()
 
     else:
-        url, apikey = config['ibp']['url'], config['ibp']['apikey']
+        url, apikey = config["ibp"]["url"], config["ibp"]["apikey"]
         server = Server(url, apikey)
 
-    logo = Image.open(config['ibp']['logo'])
+    logo = Image.open(config["ibp"]["logo"])
 
     @contextlib.contextmanager
     def task_message(msg):
         try:
-            print(msg, '...', '', end='', flush=True)
+            print(msg, "...", "", end="", flush=True)
             yield
         except Exception:
             print("error!", flush=True)
@@ -93,7 +89,7 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
 
     with task_message("Grabbing return address from IBP server"):
         from_addr = server.return_address()
-        from_addr['name'] = from_addr.pop('addressee')
+        from_addr["name"] = from_addr.pop("addressee")
 
     if args.ship_bulk:
         with task_message("Grabbing units list from IBP server"):
@@ -138,5 +134,5 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
             raise
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

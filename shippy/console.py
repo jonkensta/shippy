@@ -8,11 +8,11 @@ import functools
 
 
 class ConsoleInputError(Exception):
-    """Invalid user input"""
+    """Invalid user input."""
 
 
 def console_retry(query):
-    """Retry a console command upon bad input"""
+    """Retry a console command upon bad input."""
 
     @functools.wraps(query)
     def inner(*args, **kwargs):
@@ -28,8 +28,7 @@ def console_retry(query):
 
 @console_retry
 def query_yes_no(question: str) -> bool:
-    """Get the user to answer a yes-or-no question"""
-
+    """Get the user to answer a yes-or-no question."""
     valid = {"yes": True, "y": True, "ye": True, "no": False, "n": False}
     choice = input(question + " [y/n] ").lower()
 
@@ -41,8 +40,7 @@ def query_yes_no(question: str) -> bool:
 
 @console_retry
 def query_unit(units: typing.Dict[str, int]) -> str:
-    """Query a name of a unit from the user"""
-
+    """Query a name of a unit from the user."""
     unit = input("Enter name of unit: ").upper()
     num_matches, cutoff = 4, 0.0
     matches = difflib.get_close_matches(unit, units, num_matches, cutoff)
@@ -60,8 +58,7 @@ def query_unit(units: typing.Dict[str, int]) -> str:
 
 @console_retry
 def query_weight() -> int:
-    """Query a weight from the user"""
-
+    """Query a weight from the user."""
     try:
         pounds = int(input("Enter weight in pounds: "))
     except ValueError:
@@ -73,8 +70,7 @@ def query_weight() -> int:
 
 @console_retry
 def query_request_id() -> int:
-    """Query a request ID from the user"""
-
+    """Query a request ID from the user."""
     try:
         request_id = int(input("Please scan request ID: "))
     except ValueError:
