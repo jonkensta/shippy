@@ -102,3 +102,12 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# local vimrc
+.lvimrc
+
+# YCM config
+.ycm_extra_conf.py
+
+# flake8
+.flake8
