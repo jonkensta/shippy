@@ -2,9 +2,8 @@
 IBP server API abstraction.
 """
 
-import json
-from typing import List, Dict, Optional
 from urllib.parse import urljoin
+from typing import List, Dict, Union, Tuple
 
 import requests
 
@@ -14,6 +13,8 @@ from .shipment import extract_data as extract_shipment_data
 class ServerABC:
     """Server abstract base class."""
 
+    # pylint: disable=invalid-name, disable=redefined-builtin
+
     def unit_autoids(self) -> List[int]:
         """Get list of unit names with autoids."""
         raise NotImplementedError
@@ -22,56 +23,106 @@ class ServerABC:
         """Get configured return address."""
         raise NotImplementedError
 
-    def unit_address(self, unit_id: int) -> Dict[str, str]:
-        """Get unit address from unit autoid."""
+    def unit_address(self, id: int) -> Dict[str, str]:
+        """Get unit address from its autoid."""
         raise NotImplementedError
 
-    def request_address(self, request_id: int) -> Dict[str, str]:
-        """Get address for a request given its autoid."""
+    RequestID = Union[Tuple[str, int, int], int]
+
+    def request_address(self, request_id: RequestID) -> Dict[str, str]:
+        """Get address for a request given its request identifier."""
         raise NotImplementedError
 
-    def ship_requests(
-        self, request_ids: List[int], shipment, unit_autoid: Optional[int] = None
-    ) -> None:
-        """Tell the server that a request has been shipped."""
+    def ship_request(self, request_id: RequestID, shipment):
+        """Ship a request given its identifier."""
+        raise NotImplementedError
+
+    def ship_bulk(self, id: int, shipment) -> None:
+        """Ship a bulk package to a unit given the unit autoid."""
         raise NotImplementedError
 
 
 class Server(ServerABC):
     """Server API convenience class."""
 
+    # pylint: disable=invalid-name, disable=redefined-builtin
+
     def __init__(self, url, apikey):
+        """Create server API convenience class from url and apikey."""
         self._url = url
         self._apikey = apikey
 
-    def _post(self, path, **kwargs):
+    def _method(self, method, path, **kwargs):
         url = urljoin(self._url, path)
-        kwargs["key"] = self._apikey
-        response = requests.post(url, data=kwargs)
+        response = method(url, **kwargs)
         response.raise_for_status()
-        return json.loads(response.text)
+        return response.json()
+
+    def _post(self, path, **kwargs):
+        return self._method(requests.post, path, **kwargs)
+
+    def _get(self, path, **kwargs):
+        return self._method(requests.get, path, **kwargs)
+
+    def _put(self, path, **kwargs):
+        return self._method(requests.put, path, **kwargs)
 
     def unit_autoids(self):
         """Get list of unit names with autoids."""
-        return self._post("unit_autoids")
+        units = self._get("units")["units"]
+        return {unit["name"]: unit["id"] for unit in units}
 
     def return_address(self):
         """Get configured return address."""
-        return self._post("return_address")
+        config = self._get("config")
+        return config["address"]
 
-    def unit_address(self, unit_id):
-        """Get unit address from unit autoid."""
-        return self._post(f"unit_address/{unit_id}")
+    def unit_address(self, id):
+        """Get unit address from its autoid."""
+        return self._get(f"unit/{id:d}/address")
+
+    def _request_address_newid(self, jurisdiction, id, index):
+        """Get address for a request given its (jurisdiction, id, index) identifier."""
+        return self._get(f"request/{jurisdiction}/{id:d}/{index:d}/address")
+
+    def _request_address_autoid(self, autoid):
+        """Get address for a request given its autoid."""
+        return self._get(f"request/{autoid:d}/address")
 
     def request_address(self, request_id):
-        """Get address for a request given its autoid."""
-        return self._post(f"request_address/{request_id}")
+        """Get address for a request given its request identifier."""
+        try:
+            request_id = int(request_id)
+        except ValueError:
+            jurisdiction, id, index = request_id
+            return self._request_address_newid(jurisdiction, int(id), int(index))
+        else:
+            return self._request_address_autoid(request_id)
 
-    def ship_requests(self, request_ids, shipment, unit_autoid=None):
-        """Tell the server that a request has been shipped."""
-        ids = {f"request_ids-{k}": v for k, v in enumerate(request_ids)}
-        data = extract_shipment_data(shipment)
-        return self._post("ship_requests", **ids, **data, unit_autoid=unit_autoid)
+    def _ship_request_newid(self, jurisdiction, id, index, shipment):
+        """Ship a request given its (jurisdiction, id, index) identifier."""
+        json = extract_shipment_data(shipment)
+        return self._post(f"request/{jurisdiction}/{id:d}/{index:d}/ship", json=json)
+
+    def _ship_request_autoid(self, autoid, shipment):
+        """Ship a request given its autoid."""
+        json = extract_shipment_data(shipment)
+        return self._post(f"request/{autoid:d}/ship", json=json)
+
+    def ship_request(self, request_id, shipment):
+        """Ship a request given its identifier."""
+        try:
+            request_id = int(request_id)
+        except ValueError:
+            jurisdiction, id, index = request_id
+            return self._ship_request_newid(jurisdiction, int(id), int(index), shipment)
+        else:
+            return self._ship_request_autoid(request_id, shipment)
+
+    def ship_bulk(self, id, shipment):
+        """Ship a bulk package to a unit given unit autoid."""
+        json = extract_shipment_data(shipment)
+        return self._post(f"unit/{id:d}/ship", json=json)
 
 
 class ServerMock(ServerABC):
@@ -241,7 +292,7 @@ class ServerMock(ServerABC):
         }
 
     def request_address(self, request_id):
-        """Get address for a request given its autoid."""
+        """Get address for a request given its request identifier."""
         return {
             "city": "Tennessee Colony",
             "name": "Timothy Louis #00268601",
@@ -251,6 +302,8 @@ class ServerMock(ServerABC):
             "zipcode": "75884",
         }
 
-    def ship_requests(self, request_ids, shipment, unit_autoid=None):
-        """Tell the server that a request has been shipped."""
-        return ""
+    def ship_request(self, request_id, shipment):
+        """Ship a request given its identifier."""
+
+    def ship_bulk(self, unit_autoid, shipment):
+        """Ship a bulk package to a unit given unit autoid."""
