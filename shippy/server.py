@@ -91,7 +91,7 @@ class Server(ServerABC):
         """Get address for a request given its request identifier."""
         try:
             request_id = int(request_id)
-        except ValueError:
+        except TypeError:
             jurisdiction, id, index = request_id
             return self._request_address_newid(jurisdiction, int(id), int(index))
         else:
@@ -111,7 +111,7 @@ class Server(ServerABC):
         """Ship a request given its ID."""
         try:
             request_id = int(request_id)
-        except ValueError:
+        except TypeError:
             jurisdiction, id, index = request_id
             return self._ship_request_newid(jurisdiction, int(id), int(index), shipment)
         else:
