@@ -95,20 +95,29 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
         with task_message("Grabbing units list from IBP server"):
             units = server.unit_autoids()
 
+    def get_address_bulk():
+        unit = console.query_unit(units)
+        unit_autoid = units[unit]
+        to_addr = server.unit_address(unit_autoid)
+
+        def ship_shipment(shipment):
+            return server.ship_bulk(unit_autoid, shipment)
+
+        return to_addr, ship_shipment
+
+    def get_address_individual():
+        request_id = console.query_request_id()
+        to_addr = server.request_address(request_id)
+
+        def ship_shipment(shipment):
+            return server.ship_request(request_id, shipment)
+
+        return to_addr, ship_shipment
+
     while True:
-
-        if args.ship_bulk:
-            request_ids = []
-            unit = console.query_unit(units)
-            unit_autoid = units[unit]
-            to_addr = server.unit_address(unit_autoid)
-
-        else:
-            request_id = console.query_request_id()
-            request_ids = [request_id]
-
-            unit_autoid = None
-            to_addr = server.request_address(request_id)
+        to_addr, ship_shipment = (
+            get_address_bulk() if args.ship_bulk else get_address_individual()
+        )
 
         weight = console.query_weight()
 
@@ -117,7 +126,7 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
 
         try:
             with task_message("Registering shipment to IBP server"):
-                server.ship_requests(request_ids, shipment, unit_autoid)
+                ship_shipment(shipment)
 
             with task_message("Printing postage"):
                 label_url = shipment.postage_label.label_url
@@ -131,6 +140,7 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
         except Exception:
             with task_message("Requesting refund"):
                 shipment.refund()
+
             raise
 
 
