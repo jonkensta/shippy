@@ -69,11 +69,15 @@ def query_weight() -> int:
 
 
 @console_retry
-def query_request_id() -> int:
+def query_request_id() -> typing.Union[int, typing.Tuple[str, int, int]]:
     """Query a request ID from the user."""
+    request_id = input("Please scan request ID: ")
+
     try:
-        request_id = int(input("Please scan request ID: "))
+        return int(request_id)
     except ValueError:
-        raise ConsoleInputError("invalid request ID given")
-    else:
-        return request_id
+        try:
+            jurisdiction, inmate_id, index = request_id.split("-")
+            return jurisdiction, int(inmate_id), int(index)
+        except ValueError:
+            raise ConsoleInputError("invalid request ID given")
