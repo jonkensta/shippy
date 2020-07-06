@@ -10,6 +10,7 @@ class Builder:
     """Shipment builder."""
 
     def __init__(self, apikey):
+        """Initialize shipment builder with an apikey."""
         self._apikey = apikey
 
     def _address_from_dict(self, dict_):
@@ -21,7 +22,7 @@ class Builder:
         return easypost.Address.create_and_verify(api_key=self._apikey, **dict_)
 
     def _build_parcel(self, weight):
-        """Build easypost Parcel given weight"""
+        """Build easypost Parcel given weight."""
         return easypost.Parcel.create(
             api_key=self._apikey, predefined_package="Parcel", weight=weight
         )
