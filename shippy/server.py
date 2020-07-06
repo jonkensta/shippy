@@ -1,6 +1,4 @@
-"""
-IBP server API abstraction.
-"""
+"""IBP server API abstraction."""
 
 from urllib.parse import urljoin
 from typing import List, Dict, Union, Tuple
@@ -15,16 +13,16 @@ class ServerABC:
 
     # pylint: disable=invalid-name, disable=redefined-builtin
 
-    def unit_autoids(self) -> List[int]:
-        """Get list of unit names with autoids."""
+    def unit_ids(self) -> List[int]:
+        """Get list of unit names with IDs."""
         raise NotImplementedError
 
     def return_address(self) -> Dict[str, str]:
         """Get configured return address."""
         raise NotImplementedError
 
-    def unit_address(self, id: int) -> Dict[str, str]:
-        """Get unit address from its autoid."""
+    def unit_address(self, unit_id: int) -> Dict[str, str]:
+        """Get unit address from its ID."""
         raise NotImplementedError
 
     RequestID = Union[Tuple[str, int, int], int]
@@ -37,8 +35,8 @@ class ServerABC:
         """Ship a request given its identifier."""
         raise NotImplementedError
 
-    def ship_bulk(self, id: int, shipment) -> None:
-        """Ship a bulk package to a unit given the unit autoid."""
+    def ship_bulk(self, unit_id: int, shipment) -> None:
+        """Ship a bulk package to a unit given the unit ID."""
         raise NotImplementedError
 
 
@@ -67,8 +65,8 @@ class Server(ServerABC):
     def _put(self, path, **kwargs):
         return self._method(requests.put, path, **kwargs)
 
-    def unit_autoids(self):
-        """Get list of unit names with autoids."""
+    def unit_ids(self):
+        """Get list of unit names with ids."""
         units = self._get("units")["units"]
         return {unit["name"]: unit["id"] for unit in units}
 
@@ -77,8 +75,8 @@ class Server(ServerABC):
         config = self._get("config")
         return config["address"]
 
-    def unit_address(self, id):
-        """Get unit address from its autoid."""
+    def unit_address(self, unit_id):
+        """Get unit address from its id."""
         return self._get(f"unit/{id:d}/address")
 
     def _request_address_newid(self, jurisdiction, id, index):
@@ -110,7 +108,7 @@ class Server(ServerABC):
         return self._post(f"request/{autoid:d}/ship", json=json)
 
     def ship_request(self, request_id, shipment):
-        """Ship a request given its identifier."""
+        """Ship a request given its ID."""
         try:
             request_id = int(request_id)
         except ValueError:
@@ -119,17 +117,19 @@ class Server(ServerABC):
         else:
             return self._ship_request_autoid(request_id, shipment)
 
-    def ship_bulk(self, id, shipment):
-        """Ship a bulk package to a unit given unit autoid."""
+    def ship_bulk(self, unit_id, shipment):
+        """Ship a bulk package to a unit given unit ID."""
         json = extract_shipment_data(shipment)
-        return self._post(f"unit/{id:d}/ship", json=json)
+        return self._post(f"unit/{unit_id:d}/ship", json=json)
 
 
 class ServerMock(ServerABC):
     """Server class for testing."""
 
-    def unit_autoids(self):
-        """Get list of unit names with autoids."""
+    # pylint: disable=invalid-name, unused-argument
+
+    def unit_ids(self):
+        """Get list of unit names with IDs."""
         return {
             "ALFRED HUGHES": 68,
             "ALLRED": 19,
@@ -281,7 +281,7 @@ class ServerMock(ServerABC):
         }
 
     def unit_address(self, unit_id):
-        """Get unit address from unit autoid."""
+        """Get unit address from unit ID."""
         return {
             "city": "Colorado City",
             "name": "ATTN: Mailroom Staff",
@@ -305,5 +305,5 @@ class ServerMock(ServerABC):
     def ship_request(self, request_id, shipment):
         """Ship a request given its identifier."""
 
-    def ship_bulk(self, unit_autoid, shipment):
-        """Ship a bulk package to a unit given unit autoid."""
+    def ship_bulk(self, unit_id, shipment):
+        """Ship a bulk package to a unit given unit ID."""

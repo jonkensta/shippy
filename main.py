@@ -93,15 +93,15 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
 
     if args.ship_bulk:
         with task_message("Grabbing units list from IBP server"):
-            units = server.unit_autoids()
+            units = server.unit_ids()
 
     def get_address_bulk():
         unit = console.query_unit(units)
-        unit_autoid = units[unit]
-        to_addr = server.unit_address(unit_autoid)
+        unit_id = units[unit]
+        to_addr = server.unit_address(unit_id)
 
         def ship_shipment(shipment):
-            return server.ship_bulk(unit_autoid, shipment)
+            return server.ship_bulk(unit_id, shipment)
 
         return to_addr, ship_shipment
 
