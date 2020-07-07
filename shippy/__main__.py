@@ -72,7 +72,8 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
         url, apikey = config["ibp"]["url"], config["ibp"]["apikey"]
         server = Server(url, apikey)
 
-    logo = Image.open(config["ibp"]["logo"])
+    logopath = pkg_resources.resource_filename(__name__, "logo.png")
+    logo = Image.open(logopath)
 
     @contextlib.contextmanager
     def task_message(msg):
