@@ -72,7 +72,7 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
         url, apikey = config["ibp"]["url"], config["ibp"]["apikey"]
         server = Server(url, apikey)
 
-    logopath = pkg_resources.resource_filename(__name__, "logo.png")
+    logopath = pkg_resources.resource_filename(__name__, "logo.jpg")
     logo = Image.open(logopath)
 
     @contextlib.contextmanager
