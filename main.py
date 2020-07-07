@@ -1,6 +1,4 @@
-"""
-The main application.
-"""
+"""The main application."""
 
 import argparse
 import traceback
