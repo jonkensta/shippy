@@ -9,11 +9,11 @@ import pkg_resources
 
 from PIL import Image
 
-from shippy import console
-from shippy.misc import grab_png_from_url
-from shippy.server import Server, ServerMock
-from shippy.printing import print_image
-from shippy.shipment import Builder as ShipmentBuilder
+from . import console
+from .misc import grab_png_from_url
+from .server import Server, ServerMock
+from .printing import print_image
+from .shipment import Builder as ShipmentBuilder
 
 
 def catch_and_print_error(func):
