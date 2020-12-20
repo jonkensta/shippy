@@ -72,8 +72,9 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
         url, apikey = config["ibp"]["url"], config["ibp"]["apikey"]
         server = Server(url, apikey)
 
-    logopath = pkg_resources.resource_filename(__name__, "logo.jpg")
-    logo = Image.open(logopath)
+    logofile = config["ibp"].get("logo")  # Logo configuration is optional.
+    logopath = logofile and pkg_resources.resource_filename(__name__, logofile)
+    logo = logopath and Image.open(logopath)
 
     @contextlib.contextmanager
     def task_message(msg):
@@ -130,8 +131,9 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
                 label_url = shipment.postage_label.label_url
                 image = grab_png_from_url(label_url)
 
-                # Pasted logo position chosen through trial and error.
-                image.paste(logo, (450, 425))
+                if logo:
+                    # Pasted logo position chosen through trial and error.
+                    image.paste(logo, (450, 425))
 
                 print_image(image)
 
