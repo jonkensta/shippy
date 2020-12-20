@@ -34,8 +34,8 @@ def query_yes_no(question: str) -> bool:
 
     try:
         return valid[choice]
-    except KeyError:
-        raise ConsoleInputError("respond with 'yes' or 'no'.")
+    except KeyError as exc:
+        raise ConsoleInputError("respond with 'yes' or 'no'.") from exc
 
 
 @console_retry
@@ -52,8 +52,8 @@ def query_unit(units: typing.Dict[str, int]) -> str:
 
     try:
         return str(matches[int(choice) - 1])
-    except (ValueError, IndexError):
-        raise ConsoleInputError("invalid index given")
+    except (ValueError, IndexError) as exc:
+        raise ConsoleInputError("invalid index given") from exc
 
 
 @console_retry
@@ -61,8 +61,8 @@ def query_weight() -> int:
     """Query a weight from the user."""
     try:
         pounds = int(input("Enter weight in pounds: "))
-    except ValueError:
-        raise ConsoleInputError("invalid weight given")
+    except ValueError as exc:
+        raise ConsoleInputError("invalid weight given") from exc
     else:
         total_in_ounces = 16 * pounds
         return total_in_ounces
@@ -79,5 +79,5 @@ def query_request_id() -> typing.Union[int, typing.Tuple[str, int, int]]:
         try:
             jurisdiction, inmate_id, index = request_id.split("-")
             return jurisdiction, int(inmate_id), int(index)
-        except ValueError:
-            raise ConsoleInputError("invalid request ID given")
+        except ValueError as exc:
+            raise ConsoleInputError("invalid request ID given") from exc
