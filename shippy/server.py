@@ -272,7 +272,7 @@ class ServerMock(ServerABC):
     def return_address(self):
         """Get configured return address."""
         return {
-            "addressee": "Inside Books Project",
+            "name": "Inside Books Project",
             "city": "Austin",
             "state": "Texas",
             "street1": "827 West 12th St",

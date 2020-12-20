@@ -4,3 +4,4 @@ pillow
 pywin32
 requests
 easypost
+PyInquirer

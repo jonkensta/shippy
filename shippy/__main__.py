@@ -31,6 +31,77 @@ def catch_and_print_error(func):
     return inner
 
 
+@contextlib.contextmanager
+def task_message(msg):
+    """Capture a task context with messaging."""
+    try:
+        print(msg, "...", "", end="", flush=True)
+        yield
+    except Exception:
+        print("error!", flush=True)
+        raise
+    else:
+        print("done!", flush=True)
+
+
+def generate_addresses_bulk(server):
+    """Generate addresses for bulk shipping."""
+    with task_message("Grabbing units list from IBP server"):
+        units = server.unit_ids()
+
+    while True:
+        unit = console.query_unit(units)
+        if unit is None:
+            continue
+
+        unit_id = units[unit]
+        to_addr = server.unit_address(unit_id)
+
+        weight = console.query_weight()
+        if weight is None:
+            continue
+
+        def ship_shipment(shipment):
+            return server.ship_bulk(unit_id, shipment)
+
+        yield to_addr, weight, ship_shipment
+
+
+def generate_addresses_individual(server):
+    """Generate addresses for individual shipping."""
+    while True:
+        request_id = console.query_request_id()
+        if request_id is None:
+            continue
+
+        to_addr = server.request_address(request_id)
+
+        weight = console.query_weight()
+        if weight is None:
+            continue
+
+        def ship_shipment(shipment):
+            return server.ship_request(request_id, shipment)
+
+        yield to_addr, weight, ship_shipment
+
+
+def generate_addresses_manual(server):
+    """Generate addresses for manual shipping."""
+    while True:
+        to_addr = console.query_address()
+        if not to_addr:
+            continue
+
+        ship_shipment = None
+
+        weight = console.query_weight()
+        if weight is None:
+            continue
+
+        yield to_addr, weight, ship_shipment
+
+
 @catch_and_print_error
 def main():  # pylint: disable=too-many-locals, too-many-statements
     """Ship to an inmate or a unit."""
@@ -39,20 +110,23 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
     parser.add_argument("--configpath", type=str, default=None)
 
     subparsers = parser.add_subparsers()
-    parsers = [None, None]
+    parsers = [None, None, None]
 
     parsers[0] = subparsers.add_parser("individual", help="ship individual packages")
-    parsers[0].set_defaults(ship_bulk=False)
+    parsers[0].set_defaults(generate_addresses=generate_addresses_individual)
 
     parsers[1] = subparsers.add_parser("bulk", help="ship bulk packages")
-    parsers[1].set_defaults(ship_bulk=True)
+    parsers[1].set_defaults(generate_addresses=generate_addresses_bulk)
+
+    parsers[2] = subparsers.add_parser("manual", help="ship manual packages")
+    parsers[2].set_defaults(generate_addresses=generate_addresses_manual)
 
     args = parser.parse_args()
 
     try:
-        args.ship_bulk
+        args.generate_addresses
     except AttributeError as error:
-        msg = "Shipping type (i.e. bulk or individual) must be specified"
+        msg = "Shipping type (i.e. bulk, individual, or manual) must be specified"
         raise ValueError(msg) from error
 
     if args.configpath is not None:
@@ -76,56 +150,28 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
     logopath = logofile and pkg_resources.resource_filename(__name__, logofile)
     logo = logopath and Image.open(logopath)
 
-    @contextlib.contextmanager
-    def task_message(msg):
-        try:
-            print(msg, "...", "", end="", flush=True)
-            yield
-        except Exception:
-            print("error!", flush=True)
-            raise
-        else:
-            print("done!", flush=True)
-
     with task_message("Grabbing return address from IBP server"):
         from_addr = server.return_address()
 
-    if args.ship_bulk:
-        with task_message("Grabbing units list from IBP server"):
-            units = server.unit_ids()
-
-    def get_address_bulk():
-        unit = console.query_unit(units)
-        unit_id = units[unit]
-        to_addr = server.unit_address(unit_id)
-
-        def ship_shipment(shipment):
-            return server.ship_bulk(unit_id, shipment)
-
-        return to_addr, ship_shipment
-
-    def get_address_individual():
-        request_id = console.query_request_id()
-        to_addr = server.request_address(request_id)
-
-        def ship_shipment(shipment):
-            return server.ship_request(request_id, shipment)
-
-        return to_addr, ship_shipment
-
-    while True:
-        to_addr, ship_shipment = (
-            get_address_bulk() if args.ship_bulk else get_address_individual()
-        )
-
-        weight = console.query_weight()
+    for to_addr, weight, ship_shipment in args.generate_addresses(server):
 
         with task_message("Purchasing postage"):
             shipment = build_shipment(from_addr, to_addr, weight)
 
-        try:
-            with task_message("Registering shipment to IBP server"):
-                ship_shipment(shipment)
+        @contextlib.contextmanager
+        def request_refund_on_error(shipment):
+            """Manage a shipment context where a refund is requested on error."""
+            try:
+                yield shipment
+            except Exception:
+                with task_message("Requesting refund"):
+                    shipment.refund()
+                raise
+
+        with request_refund_on_error(shipment):
+            if ship_shipment is not None:
+                with task_message("Registering shipment to IBP server"):
+                    ship_shipment(shipment)
 
             with task_message("Printing postage"):
                 label_url = shipment.postage_label.label_url
@@ -136,12 +182,6 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
                     image.paste(logo, (450, 425))
 
                 print_image(image)
-
-        except Exception:
-            with task_message("Requesting refund"):
-                shipment.refund()
-
-            raise
 
 
 if __name__ == "__main__":
