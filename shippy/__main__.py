@@ -7,6 +7,7 @@ import contextlib
 import configparser
 import pkg_resources
 
+import pyfiglet
 from PIL import Image
 
 from . import console
@@ -149,6 +150,9 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
     logofile = config["ibp"].get("logo")  # Logo configuration is optional.
     logopath = logofile and pkg_resources.resource_filename(__name__, logofile)
     logo = logopath and Image.open(logopath)
+
+    welcome = pyfiglet.Figlet(font="slant").renderText("IBP Shipping")
+    print(welcome)
 
     with task_message("Grabbing return address from IBP server"):
         from_addr = server.return_address()

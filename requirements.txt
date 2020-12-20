@@ -3,5 +3,6 @@ pylint
 pillow
 pywin32
 requests
+pyfiglet
 easypost
 PyInquirer
