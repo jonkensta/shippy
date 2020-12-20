@@ -23,7 +23,6 @@ def build_tempfile(*args, **kwargs):
 
 def grab_png_from_url(url: str):
     """Grab a PNG image from a URL."""
-
     with build_tempfile(suffix=".png") as tmpfile:
         urllib.request.urlretrieve(url, tmpfile.name)
         img = Image.open(tmpfile.name)
