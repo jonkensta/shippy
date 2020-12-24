@@ -87,7 +87,7 @@ def generate_addresses_individual(server):
         yield to_addr, weight, ship_shipment
 
 
-def generate_addresses_manual(server):
+def generate_addresses_manual(server):  # pylint: disable=unused-argument
     """Generate addresses for manual shipping."""
     while True:
         to_addr = console.query_address()

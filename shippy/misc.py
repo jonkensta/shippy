@@ -1,6 +1,4 @@
-"""
-Miscellaneous utility functions.
-"""
+"""Miscellaneous utility functions."""
 
 import os
 import tempfile

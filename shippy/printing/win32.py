@@ -1,6 +1,4 @@
-"""
-Printing on win32 platform.
-"""
+"""Printing on win32 platform."""
 
 import contextlib
 
@@ -27,7 +25,7 @@ def print_image(img, printer=win32print.GetDefaultPrinter(), **kwargs):
     with create_printer_context(printer) as context:
 
         def get_printable_area():
-            """Get the printable area of a printer from its context"""
+            """Get the printable area of a printer from its context."""
 
             horzres = 8
             horz = context.GetDeviceCaps(horzres)
@@ -38,7 +36,7 @@ def print_image(img, printer=win32print.GetDefaultPrinter(), **kwargs):
             return horz, vert
 
         def get_total_area():
-            """Get the total area of a printer from its context"""
+            """Get the total area of a printer from its context."""
 
             physicalwidth = 110
             width = context.GetDeviceCaps(physicalwidth)
@@ -50,7 +48,7 @@ def print_image(img, printer=win32print.GetDefaultPrinter(), **kwargs):
 
         @contextlib.contextmanager
         def create_job(name):
-            """Start the print job"""
+            """Start the print job."""
 
             try:
                 context.StartDoc(name)

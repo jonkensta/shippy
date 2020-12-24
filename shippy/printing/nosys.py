@@ -1,6 +1,4 @@
-"""
-Printing on a system that doesn't have a printer.
-"""
+"""Printing on a system that doesn't have a printer."""
 
 import os
 import subprocess

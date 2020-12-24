@@ -1,6 +1,4 @@
-"""
-Printing implementation for different systems.
-"""
+"""Printing implementation for different systems."""
 
 # pylint: disable=unused-import
 try:

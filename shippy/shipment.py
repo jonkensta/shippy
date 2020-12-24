@@ -1,6 +1,4 @@
-"""
-Postage convenience functions.
-"""
+"""Postage convenience functions."""
 
 import easypost
 
