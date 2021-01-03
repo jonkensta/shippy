@@ -60,17 +60,28 @@ def query_weight() -> typing.Optional[int]:
     return int(weight)
 
 
-def query_request_id() -> typing.Optional[typing.Tuple[str, int, int]]:
+def query_request_id() -> typing.Optional[
+    typing.Union[typing.Tuple[str, int, int], int]
+]:
     """Query a request ID from the user."""
 
     def validate(request_id):
-        _, inmate_id, index = request_id.split("-")
         try:
-            int(inmate_id), int(index)
+            _, inmate_id, index = request_id.split("-")
         except ValueError:
-            return "Invalid request ID."
+            try:
+                int(request_id)
+            except ValueError:
+                return "Invalid request ID."
+            else:
+                return True
         else:
-            return True
+            try:
+                int(inmate_id), int(index)
+            except ValueError:
+                return "Invalid request ID."
+            else:
+                return True
 
     answer = PyInquirer.prompt(
         {
@@ -81,8 +92,13 @@ def query_request_id() -> typing.Optional[typing.Tuple[str, int, int]]:
         }
     )
     request_id = answer["request_id"]
-    jurisdiction, inmate_id, index = request_id.split("-")
-    return jurisdiction, int(inmate_id), int(index)
+
+    try:
+        jurisdiction, inmate_id, index = request_id.split("-")
+    except ValueError:
+        return int(request_id)
+    else:
+        return jurisdiction, int(inmate_id), int(index)
 
 
 def query_address() -> typing.Optional[typing.Dict[str, str]]:
