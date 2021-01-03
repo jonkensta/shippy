@@ -57,7 +57,7 @@ def query_weight() -> typing.Optional[int]:
         }
     )
     weight = answer.get("weight")
-    return int(weight)
+    return weight and int(weight)
 
 
 def query_request_id() -> typing.Optional[
@@ -93,6 +93,9 @@ def query_request_id() -> typing.Optional[
     )
     request_id = answer["request_id"]
 
+    if request_id is None:
+        return None
+
     try:
         jurisdiction, inmate_id, index = request_id.split("-")
     except ValueError:
@@ -113,4 +116,4 @@ def query_address() -> typing.Optional[typing.Dict[str, str]]:
             {"type": "input", "name": "zipcode", "message": "Enter zipcode:"},
         ]
     )
-    return answers
+    return answers or None
