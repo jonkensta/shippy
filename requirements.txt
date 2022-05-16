@@ -5,4 +5,4 @@ pywin32
 requests
 pyfiglet
 easypost
-PyInquirer
+questionary
