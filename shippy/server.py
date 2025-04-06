@@ -50,72 +50,36 @@ class Server(ServerABC):
         self._url = url
         self._apikey = apikey
 
-    def _method(self, method, path, **kwargs):
+    def _post(self, path, **kwargs):
         url = urljoin(self._url, path)
-        response = method(url, **kwargs)
+        response = requests.post(url, data={"key": self._apikey}, **kwargs)
         response.raise_for_status()
         return response.json()
 
-    def _post(self, path, **kwargs):
-        return self._method(requests.post, path, **kwargs)
-
-    def _get(self, path, **kwargs):
-        return self._method(requests.get, path, **kwargs)
-
-    def _put(self, path, **kwargs):
-        return self._method(requests.put, path, **kwargs)
-
     def unit_ids(self):
         """Get list of unit names with ids."""
-        units = self._get("units")["units"]
-        return {unit["name"]: unit["id"] for unit in units}
+        return self._post("unit_autoids")
 
     def return_address(self):
         """Get configured return address."""
-        config = self._get("config")
-        return config["address"]
+        return self._post("return_address")
 
-    def unit_address(self, unit_id):
+    def unit_address(self, autoid):
         """Get unit address from its id."""
-        return self._get(f"unit/{id:d}/address")
-
-    def _request_address_newid(self, jurisdiction, id, index):
-        """Get address for a request given its (jurisdiction, id, index) identifier."""
-        return self._get(f"request/{jurisdiction}/{id:d}/{index:d}/address")
+        return self._post(f"unit_address/{autoid:d}")
 
     def _request_address_autoid(self, autoid):
         """Get address for a request given its autoid."""
-        return self._get(f"request/{autoid:d}/address")
+        return self._post(f"request_address/{autoid:d}")
 
-    def request_address(self, request_id):
+    def request_address(self, autoid):
         """Get address for a request given its request identifier."""
-        try:
-            request_id = int(request_id)
-        except TypeError:
-            jurisdiction, id, index = request_id
-            return self._request_address_newid(jurisdiction, int(id), int(index))
-        else:
-            return self._request_address_autoid(request_id)
+        return self._post(f"request_address/{autoid:d}")
 
-    def _ship_request_newid(self, jurisdiction, id, index, shipment):
-        """Ship a request given its (jurisdiction, id, index) identifier."""
-        json = extract_shipment_data(shipment)
-        return self._post(f"request/{jurisdiction}/{id:d}/{index:d}/ship", json=json)
-
-    def _ship_request_autoid(self, autoid, shipment):
-        """Ship a request given its autoid."""
+    def ship_request(self, autoid, shipment):
+        """Ship a request given its ID."""
         json = extract_shipment_data(shipment)
         return self._post(f"request/{autoid:d}/ship", json=json)
-
-    def ship_request(self, request_id, shipment):
-        """Ship a request given its ID."""
-        try:
-            request_id = int(request_id)
-        except TypeError:
-            jurisdiction, id, index = request_id
-            return self._ship_request_newid(jurisdiction, int(id), int(index), shipment)
-        else:
-            return self._ship_request_autoid(request_id, shipment)
 
     def ship_bulk(self, unit_id, shipment):
         """Ship a bulk package to a unit given unit ID."""
