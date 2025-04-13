@@ -5,7 +5,7 @@ import traceback
 import functools
 import contextlib
 import configparser
-import pkg_resources
+import importlib.resources
 
 import pyfiglet
 from PIL import Image
@@ -24,10 +24,11 @@ def catch_and_print_error(func):
     def inner(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             traceback.print_exc()
             print(f"Error: {exc}")
             input("Hit any key to close")
+            raise
 
     return inner
 
@@ -108,48 +109,48 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
     """Ship to an inmate or a unit."""
     parser = argparse.ArgumentParser(description=main.__doc__)
 
-    parser.add_argument("--configpath", type=str, default=None)
+    parser.add_argument("--configpath", type=str, default=None,
+                        help="Explicit path to the configuration file.")
 
-    subparsers = parser.add_subparsers()
-    parsers = [None, None, None]
+    subparsers = parser.add_subparsers(dest="shipping_type", required=True,
+                                      help="Select shipping type") # Make subparser choice required
 
-    parsers[0] = subparsers.add_parser("individual", help="ship individual packages")
-    parsers[0].set_defaults(generate_addresses=generate_addresses_individual)
+    subparsers.add_parser("individual", help="ship individual packages").set_defaults(generate_addresses=generate_addresses_individual)
 
-    parsers[1] = subparsers.add_parser("bulk", help="ship bulk packages")
-    parsers[1].set_defaults(generate_addresses=generate_addresses_bulk)
+    subparsers.add_parser("bulk", help="ship bulk packages").set_defaults(generate_addresses=generate_addresses_bulk)
 
-    parsers[2] = subparsers.add_parser("manual", help="ship manual packages")
-    parsers[2].set_defaults(generate_addresses=generate_addresses_manual)
+    subparsers.add_parser("manual", help="ship manual packages").set_defaults(generate_addresses=generate_addresses_manual)
 
     args = parser.parse_args()
 
-    try:
-        args.generate_addresses
-    except AttributeError as error:
-        msg = "Shipping type (i.e. bulk, individual, or manual) must be specified"
-        raise ValueError(msg) from error
+    configpath= None
 
     if args.configpath is not None:
+        # Use the user-provided path directly
         configpath = args.configpath
     else:
-        configpath = pkg_resources.resource_filename(__name__, "config.ini")
+        # Use the default 'config.ini' from package resources
+        # importlib.resources.files() returns a Traversable object
+        # We use __package__ which is preferred when inside a package.
+        # Fall back to __name__ if run as a top-level script (though less common for __main__.py in a package)
+        configpath = importlib.resources.files(__package__ or __name__).joinpath("config.ini")
 
     config = configparser.ConfigParser()
     config.read(configpath)
 
-    build_shipment = ShipmentBuilder(config["easypost"]["apikey"])
+    easypost_api_key = config["easypost"]["apikey"]
+    build_shipment = ShipmentBuilder(easypost_api_key)
 
-    if bool(int(config["ibp"]["testing"])):
-        server = ServerMock()
+    ibp_testing = bool(int(config["ibp"]["testing"]))
+    ibp_url = config["ibp"]["url"]
+    ibp_api_key = config["ibp"]["apikey"]
+    server = ServerMock() if ibp_testing else Server(ibp_url, ibp_api_key)
 
-    else:
-        url, apikey = config["ibp"]["url"], config["ibp"]["apikey"]
-        server = Server(url, apikey)
-
-    logofile = config["ibp"].get("logo")  # Logo configuration is optional.
-    logopath = logofile and pkg_resources.resource_filename(__name__, logofile)
-    logo = logopath and Image.open(logopath)
+    logo = None
+    logofile = config["ibp"].get("logo") # Logo configuration is optional.
+    if logofile is not None:
+        logopath = importlib.resources.files(__package__ or __name__).joinpath(logofile)
+        logo = Image.open(logopath)
 
     welcome = pyfiglet.Figlet(font="slant").renderText("IBP Shipping")
     print(welcome)
@@ -181,8 +182,7 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
                 label_url = shipment.postage_label.label_url
                 image = grab_png_from_url(label_url)
 
-                if logo:
-                    # Pasted logo position chosen through trial and error.
+                if logo is not None:
                     image.paste(logo, (450, 425))
 
                 print_image(image)
