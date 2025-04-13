@@ -1,7 +1,10 @@
 """Methods for console user interaction."""
 
-import typing
+import contextlib
 import difflib
+import functools
+import traceback
+import typing
 
 import questionary
 
@@ -40,9 +43,9 @@ def query_weight() -> typing.Optional[int]:
     return weight and int(weight)
 
 
-def query_request_id() -> typing.Optional[
-    typing.Union[typing.Tuple[str, int, int], int]
-]:
+def query_request_id() -> (
+    typing.Optional[typing.Union[typing.Tuple[str, int, int], int]]
+):
     """Query a request ID from the user."""
 
     def validate(request_id):
@@ -99,3 +102,42 @@ def query_address() -> typing.Optional[typing.Dict[str, str]]:
         address[name] = response
 
     return address
+
+
+@contextlib.contextmanager
+def task_message(msg):
+    """Capture a task context with messaging."""
+    try:
+        print(msg, "...", "", end="", flush=True)
+        yield
+    except Exception:
+        print("error!", flush=True)
+        raise
+
+    print("done!", flush=True)
+
+
+def catch_and_print_error(func):
+    """Given user an opportunity to see an error before main closes."""
+
+    @functools.wraps(func)
+    def inner(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as exc:
+            traceback.print_exc()
+            print(f"Error: {exc}")
+            input("Hit any key to close")
+            raise
+
+    return inner
+
+
+WELCOME = r"""
+    ________  ____     _____ __    _
+   /  _/ __ )/ __ \   / ___// /_  (_)___  ____  (_)___  ____ _
+   / // __  / /_/ /   \__ \/ __ \/ / __ \/ __ \/ / __ \/ __ `/
+ _/ // /_/ / ____/   ___/ / / / / / /_/ / /_/ / / / / / /_/ /
+/___/_____/_/       /____/_/ /_/_/ .___/ .___/_/_/ /_/\__, /
+                                /_/   /_/            /____/
+"""
