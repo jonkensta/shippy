@@ -1,19 +1,19 @@
 """The main application."""
 
 import argparse
-import traceback
-import functools
-import contextlib
 import configparser
+import contextlib
+import functools
 import importlib.resources
+import traceback
 
 import pyfiglet
 from PIL import Image
 
 from . import console
 from .misc import grab_png_from_url
-from .server import Server, ServerMock
 from .printing import print_image
+from .server import Server, ServerMock
 from .shipment import Builder as ShipmentBuilder
 
 
@@ -88,7 +88,7 @@ def generate_addresses_individual(server):
         yield to_addr, weight, ship_shipment
 
 
-def generate_addresses_manual(server):  # pylint: disable=unused-argument
+def generate_addresses_manual(_):
     """Generate addresses for manual shipping."""
     while True:
         to_addr = console.query_address()
@@ -105,34 +105,40 @@ def generate_addresses_manual(server):  # pylint: disable=unused-argument
 
 
 @catch_and_print_error
-def main():  # pylint: disable=too-many-locals, too-many-statements
+def main():
     """Ship to an inmate or a unit."""
     parser = argparse.ArgumentParser(description=main.__doc__)
 
-    parser.add_argument("--configpath", type=str, default=None,
-                        help="Explicit path to the configuration file.")
+    parser.add_argument(
+        "--configpath",
+        type=str,
+        default=None,
+        help="Explicit path to the configuration file.",
+    )
 
-    subparsers = parser.add_subparsers(dest="shipping_type", required=True, help="Select shipping type")
+    subparsers = parser.add_subparsers(
+        dest="shipping_type", required=True, help="Select shipping type"
+    )
 
-    subparsers.add_parser("individual", help="ship individual packages").set_defaults(generate_addresses=generate_addresses_individual)
+    subparsers.add_parser("individual", help="ship individual packages").set_defaults(
+        generate_addresses=generate_addresses_individual
+    )
 
-    subparsers.add_parser("bulk", help="ship bulk packages").set_defaults(generate_addresses=generate_addresses_bulk)
+    subparsers.add_parser("bulk", help="ship bulk packages").set_defaults(
+        generate_addresses=generate_addresses_bulk
+    )
 
-    subparsers.add_parser("manual", help="ship manual packages").set_defaults(generate_addresses=generate_addresses_manual)
+    subparsers.add_parser("manual", help="ship manual packages").set_defaults(
+        generate_addresses=generate_addresses_manual
+    )
 
     args = parser.parse_args()
 
-    configpath= None
+    default_configpath = importlib.resources.files(__package__ or __name__).joinpath(
+        "config.ini"
+    )
 
-    if args.configpath is not None:
-        # Use the user-provided path directly
-        configpath = args.configpath
-    else:
-        # Use the default 'config.ini' from package resources
-        # importlib.resources.files() returns a Traversable object
-        # We use __package__ which is preferred when inside a package.
-        # Fall back to __name__ if run as a top-level script (though less common for __main__.py in a package)
-        configpath = importlib.resources.files(__package__ or __name__).joinpath("config.ini")
+    configpath = args.configpath if args.configpath is not None else default_configpath
 
     config = configparser.ConfigParser()
     config.read(configpath)
@@ -146,7 +152,7 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
     server = ServerMock() if ibp_testing else Server(ibp_url, ibp_api_key)
 
     logo = None
-    logofile = config["ibp"].get("logo") # Logo configuration is optional.
+    logofile = config["ibp"].get("logo")  # Logo configuration is optional.
     if logofile is not None:
         logopath = importlib.resources.files(__package__ or __name__).joinpath(logofile)
         logo = Image.open(logopath)
