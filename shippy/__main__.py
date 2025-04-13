@@ -112,8 +112,7 @@ def main():  # pylint: disable=too-many-locals, too-many-statements
     parser.add_argument("--configpath", type=str, default=None,
                         help="Explicit path to the configuration file.")
 
-    subparsers = parser.add_subparsers(dest="shipping_type", required=True,
-                                      help="Select shipping type") # Make subparser choice required
+    subparsers = parser.add_subparsers(dest="shipping_type", required=True, help="Select shipping type")
 
     subparsers.add_parser("individual", help="ship individual packages").set_defaults(generate_addresses=generate_addresses_individual)
 
