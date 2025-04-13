@@ -175,7 +175,7 @@ def main():  # pylint: disable=too-many-locals
                 yield shipment
             except Exception:
                 with task_message("Requesting refund"):
-                    shipment.refund()
+                    build_shipment._client.shipment.refund(shipment.id)
                 raise
 
         with request_refund_on_error(shipment):
