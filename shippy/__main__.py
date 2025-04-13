@@ -7,7 +7,6 @@ import functools
 import importlib.resources
 import traceback
 
-import pyfiglet
 from PIL import Image
 
 from . import console
@@ -15,6 +14,15 @@ from .misc import grab_png_from_url
 from .printing import print_image
 from .server import Server, ServerMock
 from .shipment import Builder as ShipmentBuilder
+
+WELCOME = r"""
+    ________  ____     _____ __    _
+   /  _/ __ )/ __ \   / ___// /_  (_)___  ____  (_)___  ____ _
+   / // __  / /_/ /   \__ \/ __ \/ / __ \/ __ \/ / __ \/ __ `/
+ _/ // /_/ / ____/   ___/ / / / / / /_/ / /_/ / / / / / /_/ /
+/___/_____/_/       /____/_/ /_/_/ .___/ .___/_/_/ /_/\__, /
+                                /_/   /_/            /____/
+"""
 
 
 def catch_and_print_error(func):
@@ -157,8 +165,7 @@ def main():  # pylint: disable=too-many-locals
         logopath = importlib.resources.files(__package__ or __name__).joinpath(logofile)
         logo = Image.open(logopath)
 
-    welcome = pyfiglet.Figlet(font="slant").renderText("IBP Shipping")
-    print(welcome)
+    print(WELCOME)
 
     with task_message("Grabbing return address from IBP server"):
         from_addr = server.return_address()
