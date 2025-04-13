@@ -42,8 +42,8 @@ def task_message(msg):
     except Exception:
         print("error!", flush=True)
         raise
-    else:
-        print("done!", flush=True)
+
+    print("done!", flush=True)
 
 
 def generate_addresses_bulk(server):
@@ -105,7 +105,7 @@ def generate_addresses_manual(_):
 
 
 @catch_and_print_error
-def main():
+def main():  # pylint: disable=too-many-locals
     """Ship to an inmate or a unit."""
     parser = argparse.ArgumentParser(description=main.__doc__)
 
