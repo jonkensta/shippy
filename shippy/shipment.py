@@ -43,13 +43,3 @@ class Builder:
         shipment = self._build_shipment(from_address, to_address, weight)
         rate = shipment.lowest_rate(["USPS"])
         return self._client.shipment.buy(shipment.id, rate=rate)
-
-
-def extract_data(shipment):
-    """Extract useful data from easypost shipment object."""
-    return {
-        "postage": int(round(100 * float(shipment.selected_rate.rate))),
-        "weight": int(shipment.parcel.weight),
-        "tracking_code": shipment.tracking_code,
-        "tracking_url": shipment.tracker.public_url,
-    }
