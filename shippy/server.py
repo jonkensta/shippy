@@ -39,14 +39,17 @@ class Server(ServerABC):
 
     # pylint: disable=invalid-name, disable=redefined-builtin
 
-    def __init__(self, url, apikey):
+    def __init__(self, url, apikey, timeout: float = 10.0):
         """Create server API convenience class from url and apikey."""
         self._url = url
         self._apikey = apikey
+        self._timeout = float(timeout)
 
     def _post(self, path, **kwargs):
         url = urljoin(self._url, path)
-        response = requests.post(url, data={"key": self._apikey}, **kwargs)
+        response = requests.post(
+            url, data={"key": self._apikey}, timeout=self._timeout, **kwargs
+        )
         response.raise_for_status()
         return response.json()
 
