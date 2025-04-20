@@ -37,7 +37,7 @@ class Server(ServerABC):
 
     # pylint: disable=invalid-name, disable=redefined-builtin
 
-    def __init__(self, url, apikey, timeout: float = 10.0):
+    def __init__(self, url, apikey, timeout: float = 30.0):
         """Create server API convenience class from url and apikey."""
         self._url = url
         self._apikey = apikey
