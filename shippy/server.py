@@ -5,8 +5,6 @@ from urllib.parse import urljoin
 import requests
 from easypost.models import Shipment as EasyPostShipment
 
-from .shipment import extract_data as extract_shipment_data
-
 
 class ServerABC:
     """Server abstract base class."""
