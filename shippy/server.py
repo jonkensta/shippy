@@ -73,10 +73,12 @@ class Server(ServerABC):
 
     def ship(self, shipment, autoid: int | None = None):
         """Ship a shipment with optional request autoid."""
-        rate = int(round(100.0 * shipment.selected_rate.rate))
+        rate_dollars = float(shipment.selected_rate.rate)
+        rate_cents = int(round(100 * rate_dollars))
+        weight = int(shipment.parcel.weight)
         data = {
-            "postage": rate,
-            "weight": int(shipment.parcel.weight),
+            "postage": rate_cents,
+            "weight": weight,
             "tracking_code": shipment.tracking_code,
             "tracking_url": shipment.tracker.public_url,
         }
