@@ -1,5 +1,6 @@
 """IBP server API abstraction."""
 
+import json
 from urllib.parse import urljoin
 
 import requests
@@ -45,11 +46,10 @@ class Server(ServerABC):
 
     def _post(self, path, **kwargs):
         url = urljoin(self._url, path)
-        response = requests.post(
-            url, data={"key": self._apikey}, timeout=self._timeout, **kwargs
-        )
+        kwargs["key"] = self._apikey
+        response = requests.post(url, data=kwargs, timeout=self._timeout)
         response.raise_for_status()
-        return response.json()
+        return json.loads(response.text)
 
     def unit_ids(self):
         """Get list of unit names with ids."""
