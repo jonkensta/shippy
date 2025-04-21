@@ -28,7 +28,12 @@ class ServerABC:
         """Get address for a request given its request identifier."""
         raise NotImplementedError
 
-    def ship(self, shipment: EasyPostShipment, autoid: int | None = None):
+    def ship(
+        self,
+        shipment: EasyPostShipment,
+        request_ids: list[int] = [],
+        unit_autoid: int | None = None,
+    ):
         """Ship a shipment with optional request autoid."""
         raise NotImplementedError
 
@@ -71,8 +76,16 @@ class Server(ServerABC):
         """Get address for a request given its request identifier."""
         return self._post(f"request_address/{autoid:d}")
 
-    def ship(self, shipment, autoid: int | None = None):
+    def ship(
+        self,
+        shipment: EasyPostShipment,
+        request_ids: list[int] | None = None,
+        unit_autoid: int | None = None,
+    ):
         """Ship a shipment with optional request autoid."""
+        if request_ids is None:
+            request_ids = []
+
         rate_dollars = float(shipment.selected_rate.rate)
         rate_cents = int(round(100 * rate_dollars))
         weight = int(shipment.parcel.weight)
@@ -81,11 +94,9 @@ class Server(ServerABC):
             "weight": weight,
             "tracking_code": shipment.tracking_code,
             "tracking_url": shipment.tracker.public_url,
+            **{f"request_ids-{k}": v for k, v in enumerate(request_ids)},
+            "unit_autoid": unit_autoid,
         }
-
-        if autoid is not None:
-            data["request_ids-0"] = autoid
-
         return self._post("ship_requests", **data)
 
 

@@ -31,7 +31,7 @@ def generate_addresses_bulk(server: Server, *_):
             continue
 
         def ship_shipment(shipment):
-            return server.ship(shipment)
+            return server.ship(shipment, unit_autoid=unit_id)
 
         yield to_addr, weight, ship_shipment
 
@@ -50,7 +50,7 @@ def generate_addresses_individual(server: Server, *_):
             continue
 
         def ship_shipment(shipment):
-            return server.ship(shipment, autoid=request_id)
+            return server.ship(shipment, request_ids=[request_id])
 
         yield to_addr, weight, ship_shipment
 
