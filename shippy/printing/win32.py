@@ -2,9 +2,8 @@
 
 import contextlib
 
-import win32ui
 import win32print
-
+import win32ui
 from PIL import ImageWin
 
 
@@ -64,7 +63,8 @@ def print_image(img, printer=win32print.GetDefaultPrinter(), **kwargs):
 
         printable_w, printable_h = get_printable_area()
         ratios = [printable_w / img.size[0], printable_h / img.size[1]]
-        scale = min(ratios)
+        backoff = 0.95  # Backoff error empirically added to avoid chopping the page.
+        scale = backoff * min(ratios)
 
         # Start print job, draw the bitmap to printer at scaled size.
         with create_job("postage_label"):
