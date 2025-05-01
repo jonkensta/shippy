@@ -102,6 +102,8 @@ def main(generate_addresses):  # pylint: disable=too-many-locals
 
     for to_addr, weight, ship_shipment in generate_addresses(server):
 
+        weight = 16.0 * weight  # Convert to ounces.
+
         with console.task_message("Purchasing postage"):
             shipment = build_shipment(from_addr, to_addr, weight)
 
