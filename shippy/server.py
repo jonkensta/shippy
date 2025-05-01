@@ -257,7 +257,7 @@ class ServerMock(ServerABC):
             "zipcode": "78701",
         }
 
-    def unit_address(self, *_):
+    def unit_address(self, *args, **kwargs):
         """Get unit address from unit ID."""
         return {
             "city": "Colorado City",
@@ -268,7 +268,7 @@ class ServerMock(ServerABC):
             "zipcode": "79512",
         }
 
-    def request_address(self, *_):
+    def request_address(self, *args, **kwargs):
         """Get address for a request given its request identifier."""
         return {
             "city": "Tennessee Colony",
@@ -279,5 +279,5 @@ class ServerMock(ServerABC):
             "zipcode": "75884",
         }
 
-    def ship(self, *_):
+    def ship(self, *args, **kwargs):
         """Ship a shipment with optional request autoid."""
