@@ -56,15 +56,15 @@ def query_request_id() -> (
                 int(request_id)
             except ValueError:
                 return "Request ID must be an integer."
-            else:
-                return True
-        else:
-            try:
-                int(inmate_id), int(index)
-            except ValueError:
-                return "Inmate ID and index must be an integer."
-            else:
-                return True
+
+            return True
+
+        try:
+            int(inmate_id), int(index)
+        except ValueError:
+            return "Inmate ID and index must be an integer."
+
+        return True
 
     request_id = questionary.text(
         "Please enter the request ID:", validate=validate
@@ -77,8 +77,8 @@ def query_request_id() -> (
         jurisdiction, inmate_id, index = request_id.split("-")
     except ValueError:
         return int(request_id)
-    else:
-        return jurisdiction, int(inmate_id), int(index)
+
+    return jurisdiction, int(inmate_id), int(index)
 
 
 def query_address() -> typing.Optional[typing.Dict[str, str]]:
