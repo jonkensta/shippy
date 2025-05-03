@@ -11,7 +11,7 @@ import questionary
 
 def query_unit(units: typing.Dict[str, int]) -> typing.Optional[str]:
     """Query a name of a unit from the user."""
-    unit = questionary.text("Enter name of unit:").ask().upper()
+    unit = questionary.text("Enter name of unit:").ask()
     if unit is None:
         return None
 
