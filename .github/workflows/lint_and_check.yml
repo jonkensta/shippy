@@ -3,10 +3,10 @@ name: Lint and Check
 on:
   push:
     branches:
-      - main # Or your default branch, e.g., master
+      - main
   pull_request:
     branches:
-      - main # Or your default branch
+      - main
 
 jobs:
   lint:
