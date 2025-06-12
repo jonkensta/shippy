@@ -18,8 +18,13 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11" #
+          python-version: "3.11"
           cache: "pip" # Cache pip dependencies
+
+      - name: Create and activate virtual environment
+        run: |
+          python -m venv venv
+          source venv/bin/activate
 
       - name: Install dependencies
         run: |
@@ -28,10 +33,16 @@ jobs:
           pip install -r requirements_dev.txt
 
       - name: Run Pylint
-        run: pylint --disable=W0511 shippy
+        run: |
+          source venv/bin/activate
+          pylint --disable=W0511 shippy
 
       - name: Run MyPy
-        run: mypy shippy
+        run: |
+          source venv/bin/activate
+          mypy shippy
 
       - name: Run Black
-        run: black --check shippy
+        run: |
+          source venv/bin/activate
+          black --check shippy
