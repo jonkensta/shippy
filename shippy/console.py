@@ -85,6 +85,7 @@ def query_address() -> typing.Optional[typing.Dict[str, str]]:
     """Query an address from the user."""
     prompts = {
         "name": "Enter name:",
+        "company": "Enter company name:",
         "street1": "Enter street1:",
         "street2": "Enter street2:",
         "city": "Enter city:",
