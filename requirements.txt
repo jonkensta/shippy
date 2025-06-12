@@ -1,5 +1,3 @@
-mypy
-pylint
 pillow
 requests
 easypost
