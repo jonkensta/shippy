@@ -18,6 +18,9 @@ def generate_addresses_bulk(server: Server, *_):
     with console.task_message("Grabbing units list from IBP server"):
         units = server.unit_ids()
 
+    # Normalize unit names to uppercase.
+    units = {key.upper(): value for key, value in units.items()}
+
     while True:
         unit = console.query_unit(units)
         if unit is None:
