@@ -31,7 +31,7 @@ class ServerABC:
     def ship(
         self,
         shipment: EasyPostShipment,
-        request_ids: list[int] = [],
+        request_ids: list[int] | None = None,
         unit_autoid: int | None = None,
     ):
         """Ship a shipment with optional request autoid."""

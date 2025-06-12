@@ -2,8 +2,8 @@
 
 import contextlib
 
-import win32print
-import win32ui
+import win32print  # pylint: disable=import-error
+import win32ui  # pylint: disable=import-error
 from PIL import ImageWin
 
 

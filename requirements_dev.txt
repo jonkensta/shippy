@@ -1,3 +1,5 @@
+black
 mypy
 pylint
-black
+types-pywin32
+types-requests

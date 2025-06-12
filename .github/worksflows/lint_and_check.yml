@@ -1,0 +1,37 @@
+name: Lint and Check
+
+on:
+  push:
+    branches:
+      - main # Or your default branch, e.g., master
+  pull_request:
+    branches:
+      - main # Or your default branch
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11" #
+          cache: "pip" # Cache pip dependencies
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements_dev.txt
+
+      - name: Run Pylint
+        run: pylint --disable=W0511 shippy
+
+      - name: Run MyPy
+        run: mypy shippy
+
+      - name: Run Black
+        run: black --check shippy

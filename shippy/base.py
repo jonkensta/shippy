@@ -117,6 +117,8 @@ def main(generate_addresses):  # pylint: disable=too-many-locals
                 yield shipment
             except Exception:
                 with console.task_message("Requesting refund"):
+                    # TODO: Fix protected access here.
+                    # pylint: disable=protected-access
                     build_shipment._client.shipment.refund(shipment.id)
                 raise
 
