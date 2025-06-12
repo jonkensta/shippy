@@ -1,11 +1,10 @@
 """IBP server API abstraction."""
 
+import json
 from urllib.parse import urljoin
-from typing import List, Dict, Union, Tuple
 
 import requests
-
-from .shipment import extract_data as extract_shipment_data
+from easypost.models import Shipment as EasyPostShipment
 
 
 class ServerABC:
@@ -13,30 +12,29 @@ class ServerABC:
 
     # pylint: disable=invalid-name, disable=redefined-builtin
 
-    def unit_ids(self) -> List[int]:
+    def unit_ids(self) -> list[int]:
         """Get list of unit names with IDs."""
         raise NotImplementedError
 
-    def return_address(self) -> Dict[str, str]:
+    def return_address(self) -> dict[str, str]:
         """Get configured return address."""
         raise NotImplementedError
 
-    def unit_address(self, unit_id: int) -> Dict[str, str]:
+    def unit_address(self, autoid: int) -> dict[str, str]:
         """Get unit address from its ID."""
         raise NotImplementedError
 
-    RequestID = Union[Tuple[str, int, int], int]
-
-    def request_address(self, request_id: RequestID) -> Dict[str, str]:
+    def request_address(self, autoid: int) -> dict[str, str]:
         """Get address for a request given its request identifier."""
         raise NotImplementedError
 
-    def ship_request(self, request_id: RequestID, shipment):
-        """Ship a request given its identifier."""
-        raise NotImplementedError
-
-    def ship_bulk(self, unit_id: int, shipment) -> None:
-        """Ship a bulk package to a unit given the unit ID."""
+    def ship(
+        self,
+        shipment: EasyPostShipment,
+        request_ids: list[int] = [],
+        unit_autoid: int | None = None,
+    ):
+        """Ship a shipment with optional request autoid."""
         raise NotImplementedError
 
 
@@ -45,82 +43,61 @@ class Server(ServerABC):
 
     # pylint: disable=invalid-name, disable=redefined-builtin
 
-    def __init__(self, url, apikey):
+    def __init__(self, url, apikey, timeout: float = 30.0):
         """Create server API convenience class from url and apikey."""
         self._url = url
         self._apikey = apikey
-
-    def _method(self, method, path, **kwargs):
-        url = urljoin(self._url, path)
-        response = method(url, **kwargs)
-        response.raise_for_status()
-        return response.json()
+        self._timeout = float(timeout)
 
     def _post(self, path, **kwargs):
-        return self._method(requests.post, path, **kwargs)
-
-    def _get(self, path, **kwargs):
-        return self._method(requests.get, path, **kwargs)
-
-    def _put(self, path, **kwargs):
-        return self._method(requests.put, path, **kwargs)
+        url = urljoin(self._url, path)
+        kwargs["key"] = self._apikey
+        response = requests.post(url, data=kwargs, timeout=self._timeout)
+        response.raise_for_status()
+        return json.loads(response.text)
 
     def unit_ids(self):
         """Get list of unit names with ids."""
-        units = self._get("units")["units"]
-        return {unit["name"]: unit["id"] for unit in units}
+        return self._post("unit_autoids")
 
     def return_address(self):
         """Get configured return address."""
-        config = self._get("config")
-        return config["address"]
+        return self._post("return_address")
 
-    def unit_address(self, unit_id):
+    def unit_address(self, autoid):
         """Get unit address from its id."""
-        return self._get(f"unit/{id:d}/address")
-
-    def _request_address_newid(self, jurisdiction, id, index):
-        """Get address for a request given its (jurisdiction, id, index) identifier."""
-        return self._get(f"request/{jurisdiction}/{id:d}/{index:d}/address")
+        return self._post(f"unit_address/{autoid:d}")
 
     def _request_address_autoid(self, autoid):
         """Get address for a request given its autoid."""
-        return self._get(f"request/{autoid:d}/address")
+        return self._post(f"request_address/{autoid:d}")
 
-    def request_address(self, request_id):
+    def request_address(self, autoid):
         """Get address for a request given its request identifier."""
-        try:
-            request_id = int(request_id)
-        except TypeError:
-            jurisdiction, id, index = request_id
-            return self._request_address_newid(jurisdiction, int(id), int(index))
-        else:
-            return self._request_address_autoid(request_id)
+        return self._post(f"request_address/{autoid:d}")
 
-    def _ship_request_newid(self, jurisdiction, id, index, shipment):
-        """Ship a request given its (jurisdiction, id, index) identifier."""
-        json = extract_shipment_data(shipment)
-        return self._post(f"request/{jurisdiction}/{id:d}/{index:d}/ship", json=json)
+    def ship(
+        self,
+        shipment: EasyPostShipment,
+        request_ids: list[int] | None = None,
+        unit_autoid: int | None = None,
+    ):
+        """Ship a shipment with optional request autoid."""
+        if request_ids is None:
+            request_ids = []
 
-    def _ship_request_autoid(self, autoid, shipment):
-        """Ship a request given its autoid."""
-        json = extract_shipment_data(shipment)
-        return self._post(f"request/{autoid:d}/ship", json=json)
-
-    def ship_request(self, request_id, shipment):
-        """Ship a request given its ID."""
-        try:
-            request_id = int(request_id)
-        except TypeError:
-            jurisdiction, id, index = request_id
-            return self._ship_request_newid(jurisdiction, int(id), int(index), shipment)
-        else:
-            return self._ship_request_autoid(request_id, shipment)
-
-    def ship_bulk(self, unit_id, shipment):
-        """Ship a bulk package to a unit given unit ID."""
-        json = extract_shipment_data(shipment)
-        return self._post(f"unit/{unit_id:d}/ship", json=json)
+        rate_dollars = float(shipment.selected_rate.rate)
+        rate_cents = int(round(100 * rate_dollars))
+        weight = int(shipment.parcel.weight)
+        data = {
+            "postage": rate_cents,
+            "weight": weight,
+            "tracking_code": shipment.tracking_code,
+            "tracking_url": shipment.tracker.public_url,
+            **{f"request_ids-{k}": v for k, v in enumerate(request_ids)},
+            "unit_autoid": unit_autoid,
+        }
+        return self._post("ship_requests", **data)
 
 
 class ServerMock(ServerABC):
@@ -280,7 +257,7 @@ class ServerMock(ServerABC):
             "zipcode": "78701",
         }
 
-    def unit_address(self, unit_id):
+    def unit_address(self, *args, **kwargs):
         """Get unit address from unit ID."""
         return {
             "city": "Colorado City",
@@ -291,7 +268,7 @@ class ServerMock(ServerABC):
             "zipcode": "79512",
         }
 
-    def request_address(self, request_id):
+    def request_address(self, *args, **kwargs):
         """Get address for a request given its request identifier."""
         return {
             "city": "Tennessee Colony",
@@ -302,8 +279,5 @@ class ServerMock(ServerABC):
             "zipcode": "75884",
         }
 
-    def ship_request(self, request_id, shipment):
-        """Ship a request given its identifier."""
-
-    def ship_bulk(self, unit_id, shipment):
-        """Ship a bulk package to a unit given unit ID."""
+    def ship(self, *args, **kwargs):
+        """Ship a shipment with optional request autoid."""

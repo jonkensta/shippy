@@ -1,37 +1,28 @@
 """Methods for console user interaction."""
 
-import typing
+import contextlib
 import difflib
+import functools
+import traceback
+import typing
 
-import PyInquirer
+import questionary
 
 
 def query_unit(units: typing.Dict[str, int]) -> typing.Optional[str]:
     """Query a name of a unit from the user."""
-    answer = PyInquirer.prompt(
-        {"type": "input", "name": "unit", "message": "Enter name of unit:"}
-    )
-    unit = answer.get("unit")
+    unit = questionary.text("Enter name of unit:").ask()
     if unit is None:
         return None
 
+    unit = unit.upper()
+
     def get_matches(unit):
         num_matches, cutoff = 4, 0.0
-        return difflib.get_close_matches(unit, units, num_matches, cutoff)
+        return difflib.get_close_matches(unit, list(units), num_matches, cutoff)
 
     matches = get_matches(unit)
-    choices = [dict(name=match) for match in matches]
-
-    answer = PyInquirer.prompt(
-        {
-            "type": "list",
-            "message": "Select match:",
-            "name": "unit",
-            "choices": choices,
-        }
-    )
-    unit = answer.get("unit")
-    return unit
+    return questionary.select("Select match:", choices=matches).ask()
 
 
 def query_weight() -> typing.Optional[int]:
@@ -41,28 +32,20 @@ def query_weight() -> typing.Optional[int]:
         try:
             weight = int(weight)
         except (TypeError, ValueError):
-            return "Weight must be an integer value."
+            return "Weight must be an integer."
 
         if weight <= 0:
-            return "Weight must be positive."
+            return "Weight must be strictly positive."
 
         return True
 
-    answer = PyInquirer.prompt(
-        {
-            "type": "input",
-            "name": "weight",
-            "message": "Please enter weight in pounds:",
-            "validate": validate,
-        }
-    )
-    weight = answer.get("weight")
+    weight = questionary.text("Please enter weight in pounds:", validate=validate).ask()
     return weight and int(weight)
 
 
-def query_request_id() -> typing.Optional[
-    typing.Union[typing.Tuple[str, int, int], int]
-]:
+def query_request_id() -> (
+    typing.Optional[typing.Union[typing.Tuple[str, int, int], int]]
+):
     """Query a request ID from the user."""
 
     def validate(request_id):
@@ -72,26 +55,20 @@ def query_request_id() -> typing.Optional[
             try:
                 int(request_id)
             except ValueError:
-                return "Invalid request ID."
-            else:
-                return True
-        else:
-            try:
-                int(inmate_id), int(index)
-            except ValueError:
-                return "Invalid request ID."
-            else:
-                return True
+                return "Request ID must be an integer."
 
-    answer = PyInquirer.prompt(
-        {
-            "type": "input",
-            "name": "request_id",
-            "message": "Please scan or enter the request ID:",
-            "validate": validate,
-        }
-    )
-    request_id = answer["request_id"]
+            return True
+
+        try:
+            int(inmate_id), int(index)
+        except ValueError:
+            return "Inmate ID and index must be an integer."
+
+        return True
+
+    request_id = questionary.text(
+        "Please enter the request ID:", validate=validate
+    ).ask()
 
     if request_id is None:
         return None
@@ -100,20 +77,68 @@ def query_request_id() -> typing.Optional[
         jurisdiction, inmate_id, index = request_id.split("-")
     except ValueError:
         return int(request_id)
-    else:
-        return jurisdiction, int(inmate_id), int(index)
+
+    return jurisdiction, int(inmate_id), int(index)
 
 
 def query_address() -> typing.Optional[typing.Dict[str, str]]:
     """Query an address from the user."""
-    answers = PyInquirer.prompt(
-        [
-            {"type": "input", "name": "name", "message": "Enter name:"},
-            {"type": "input", "name": "street1", "message": "Enter street1:"},
-            {"type": "input", "name": "street2", "message": "Enter street2:"},
-            {"type": "input", "name": "city", "message": "Enter city:"},
-            {"type": "input", "name": "state", "message": "Enter state:"},
-            {"type": "input", "name": "zipcode", "message": "Enter zipcode:"},
-        ]
-    )
-    return answers or None
+    prompts = {
+        "name": "Enter name:",
+        "company": "Enter company name:",
+        "street1": "Enter street1:",
+        "street2": "Enter street2:",
+        "city": "Enter city:",
+        "state": "Enter state:",
+        "zipcode": "Enter zipcode:",
+    }
+
+    questions = {name: questionary.text(prompt) for name, prompt in prompts.items()}
+
+    address = {}
+    for name, question in questions.items():
+        response = question.ask()
+        if response is None:
+            return None
+        address[name] = response
+
+    return address
+
+
+@contextlib.contextmanager
+def task_message(msg):
+    """Capture a task context with messaging."""
+    try:
+        print(msg, "...", "", end="", flush=True)
+        yield
+    except Exception:
+        print("error!", flush=True)
+        raise
+
+    print("done!", flush=True)
+
+
+def catch_and_print_error(func):
+    """Given user an opportunity to see an error before main closes."""
+
+    @functools.wraps(func)
+    def inner(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as exc:
+            traceback.print_exc()
+            print(f"Error: {exc}")
+            input("Hit any key to close")
+            raise
+
+    return inner
+
+
+WELCOME = r"""
+    ________  ____     _____ __    _             _
+   /  _/ __ )/ __ \   / ___// /_  (_)___  ____  (_)___  ____ _
+   / // __  / /_/ /   \__ \/ __ \/ / __ \/ __ \/ / __ \/ __ `/
+ _/ // /_/ / ____/   ___/ / / / / / /_/ / /_/ / / / / / /_/ /
+/___/_____/_/       /____/_/ /_/_/ .___/ .___/_/_/ /_/\__, /
+                                /_/   /_/            /____/
+"""
