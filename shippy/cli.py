@@ -79,9 +79,7 @@ def generate_addresses_manual(*_):
 
 def load_logo() -> Image.Image:
     """Load logo image."""
-    file = __package__ or __name__
-    print(file)
-    logo_fpath = importlib.resources.files(file).joinpath("logo.jpg")
+    logo_fpath = importlib.resources.files("shippy.assets").joinpath("logo.jpg")
     return Image.open(str(logo_fpath))
 
 
