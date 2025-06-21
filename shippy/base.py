@@ -132,6 +132,9 @@ def main():
     logo = load_logo()
 
     questionary.print(console.WELCOME, style="fg:white")
+    questionary.print(
+        "\nWelcome! Answer prompts to print postage, hit CTRL+C to cancel and restart\n"
+    )
 
     with console.task_message("Grabbing return address from IBP server"):
         from_addr = shipping.build_address(easypost_client, **server.return_address())
