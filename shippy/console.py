@@ -109,13 +109,13 @@ def query_address() -> typing.Optional[typing.Dict[str, str]]:
 def task_message(msg):
     """Capture a task context with messaging."""
     try:
-        print(msg, "...", "", end="", flush=True)
+        questionary.print(f"{msg} ... ", end="", flush=True)
         yield
     except Exception:
-        print("error!", flush=True)
+        questionary.print("error!", style="fg:red", flush=True)
         raise
 
-    print("done!", flush=True)
+    questionary.print("done!", style="fg:white", flush=True)
 
 
 def catch_and_print_error(func):
@@ -127,7 +127,7 @@ def catch_and_print_error(func):
             return func(*args, **kwargs)
         except Exception as exc:
             traceback.print_exc()
-            print(f"Error: {exc}")
+            questionary.print(f"Error: {exc}", style="fg:red", flush=True)
             input("Hit any key to close")
             raise
 

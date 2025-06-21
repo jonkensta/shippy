@@ -4,13 +4,14 @@ import configparser
 import contextlib
 import importlib.resources
 
+import easypost
+import questionary
 from PIL import Image
 
-from . import console
+from . import console, shipping
 from .misc import grab_png_from_url
 from .printing import print_image
 from .server import Server, ServerMock
-from .shipment import Builder as ShipmentBuilder
 
 
 def generate_addresses_bulk(server: Server, *_):
@@ -85,7 +86,7 @@ def main(generate_addresses):  # pylint: disable=too-many-locals
     config.read(configpath)
 
     easypost_api_key = config["easypost"]["apikey"]
-    build_shipment = ShipmentBuilder(easypost_api_key)
+    easypost_client = easypost.EasyPostClient(easypost_api_key)
 
     ibp_testing = bool(int(config["ibp"]["testing"]))
     ibp_url = config["ibp"]["url"]
@@ -98,17 +99,33 @@ def main(generate_addresses):  # pylint: disable=too-many-locals
         logopath = importlib.resources.files(__package__ or __name__).joinpath(logofile)
         logo = Image.open(logopath)
 
-    print(console.WELCOME)
+    questionary.print(console.WELCOME, style="fg:white")
 
     with console.task_message("Grabbing return address from IBP server"):
-        from_addr = server.return_address()
+        from_addr_dict = server.return_address()
+        from_addr = shipping.build_address(easypost_client, **from_addr_dict)
 
-    for to_addr, weight, ship_shipment in generate_addresses(server):
+    try:
+        with console.task_message("Verifying return address"):
+            easypost_client.address.verify(from_addr.id)
+    except easypost.errors.InvalidRequestError:
+        pass
+
+    for to_addr_dict, weight, ship_shipment in generate_addresses(server):
+        to_addr = shipping.build_address(easypost_client, **to_addr_dict)
+
+        try:
+            with console.task_message("Verifying address"):
+                easypost_client.address.verify(to_addr.id)
+        except easypost.errors.InvalidRequestError:
+            pass
 
         weight = 16.0 * weight  # Convert to ounces.
 
         with console.task_message("Purchasing postage"):
-            shipment = build_shipment(from_addr, to_addr, weight)
+            shipment = shipping.build_shipment(
+                easypost_client, from_addr, to_addr, weight
+            )
 
         @contextlib.contextmanager
         def request_refund_on_error(shipment):
@@ -117,9 +134,7 @@ def main(generate_addresses):  # pylint: disable=too-many-locals
                 yield shipment
             except Exception:
                 with console.task_message("Requesting refund"):
-                    # TODO: Fix protected access here.
-                    # pylint: disable=protected-access
-                    build_shipment._client.shipment.refund(shipment.id)
+                    easypost_client.shipment.refund(shipment.id)
                 raise
 
         with request_refund_on_error(shipment):
