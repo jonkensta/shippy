@@ -19,7 +19,7 @@ class Builder:
         kwargs["zip"] = kwargs.pop("zipcode")
         kwargs["country"] = "US"
         kwargs["phone"] = ""
-        return self._client.address.create_and_verify(**kwargs)
+        return self._client.address.create(**kwargs)
 
     def _build_parcel(self, weight: int) -> EasyPostParcel:
         """Build easypost Parcel given weight in ounces."""
