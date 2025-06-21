@@ -1,8 +1,10 @@
 """The main application."""
 
+import argparse
 import configparser
 import contextlib
 import importlib.resources
+import pathlib
 
 import easypost
 import questionary
@@ -11,7 +13,7 @@ from PIL import Image
 from . import console, shipping
 from .misc import grab_png_from_url
 from .printing import print_image
-from .server import Server, ServerMock
+from .server import Server
 
 
 def generate_addresses_bulk(server: Server, *_):
@@ -75,50 +77,85 @@ def generate_addresses_manual(*_):
         yield to_addr, weight, ship_shipment
 
 
-@console.catch_and_print_error
-def main(generate_addresses):  # pylint: disable=too-many-locals
-    """Ship to an inmate or a unit."""
-    configpath = importlib.resources.files(__package__ or __name__).joinpath(
-        "config.ini"
+def load_logo() -> Image.Image:
+    """Load logo image."""
+    file = __package__ or __name__
+    print(file)
+    logo_fpath = importlib.resources.files(file).joinpath("logo.jpg")
+    return Image.open(str(logo_fpath))
+
+
+def load_config(filepath: pathlib.Path) -> configparser.ConfigParser:
+    """Load config file."""
+    config = configparser.ConfigParser()
+    config.read(filepath)
+    return config
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build an arguments parser."""
+    parser = argparse.ArgumentParser(description=main.__doc__)
+
+    parser.add_argument(
+        "--config", type=pathlib.Path, required=True, help="Configuration file path"
     )
 
-    config = configparser.ConfigParser()
-    config.read(configpath)
+    subparsers = parser.add_subparsers(
+        dest="shipping_type", required=True, help="Select shipping type"
+    )
 
-    easypost_api_key = config["easypost"]["apikey"]
-    easypost_client = easypost.EasyPostClient(easypost_api_key)
+    subparsers.add_parser("individual", help="ship individual packages").set_defaults(
+        generate_addresses=generate_addresses_individual
+    )
 
-    ibp_testing = bool(int(config["ibp"]["testing"]))
-    ibp_url = config["ibp"]["url"]
-    ibp_api_key = config["ibp"]["apikey"]
-    server = ServerMock() if ibp_testing else Server(ibp_url, ibp_api_key)
+    subparsers.add_parser("bulk", help="ship bulk packages").set_defaults(
+        generate_addresses=generate_addresses_bulk
+    )
 
-    logo = None
-    logofile = config["ibp"].get("logo")  # Logo configuration is optional.
-    if logofile is not None:
-        logopath = importlib.resources.files(__package__ or __name__).joinpath(logofile)
-        logo = Image.open(logopath)
+    subparsers.add_parser("manual", help="ship manual packages").set_defaults(
+        generate_addresses=generate_addresses_manual
+    )
+
+    return parser
+
+
+@console.catch_and_print_error
+def main():
+    """Ship to an inmate or a unit."""
+
+    args = build_parser().parse_args()
+    config = load_config(args.config)
+
+    easypost_client = easypost.EasyPostClient(config["easypost"]["apikey"])
+    server = Server(config["ibp"]["url"], config["ibp"]["apikey"])
+
+    logo = load_logo()
 
     questionary.print(console.WELCOME, style="fg:white")
 
     with console.task_message("Grabbing return address from IBP server"):
-        from_addr_dict = server.return_address()
-        from_addr = shipping.build_address(easypost_client, **from_addr_dict)
+        from_addr = shipping.build_address(easypost_client, **server.return_address())
 
     try:
         with console.task_message("Verifying return address"):
             easypost_client.address.verify(from_addr.id)
     except easypost.errors.InvalidRequestError:
-        pass
+        questionary.print(
+            "\tFailed to verify return address, consider double-checking before shipping",
+            style="fg:yellow",
+        )
 
-    for to_addr_dict, weight, ship_shipment in generate_addresses(server):
+    for to_addr_dict, weight, ship_shipment in args.generate_addresses(server):
         to_addr = shipping.build_address(easypost_client, **to_addr_dict)
 
         try:
             with console.task_message("Verifying address"):
                 easypost_client.address.verify(to_addr.id)
         except easypost.errors.InvalidRequestError:
-            pass
+            questionary.print(
+                "\tFailed to verify address, consider double-checking before shipping",
+                style="fg:yellow",
+            )
 
         weight = 16.0 * weight  # Convert to ounces.
 
