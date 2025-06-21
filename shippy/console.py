@@ -1,7 +1,6 @@
 """Methods for console user interaction."""
 
 import contextlib
-import difflib
 import functools
 import traceback
 import typing
@@ -11,18 +10,15 @@ import questionary
 
 def query_unit(units: typing.Dict[str, int]) -> typing.Optional[str]:
     """Query a name of a unit from the user."""
-    unit = questionary.text("Enter name of unit:").ask()
-    if unit is None:
-        return None
 
-    unit = unit.upper()
+    def validate(unit):
+        return unit.upper() in units
 
-    def get_matches(unit):
-        num_matches, cutoff = 4, 0.0
-        return difflib.get_close_matches(unit, list(units), num_matches, cutoff)
+    unit = questionary.autocomplete(
+        "Enter name of unit:", choices=units, validate=validate
+    ).ask()
 
-    matches = get_matches(unit)
-    return questionary.select("Select match:", choices=matches).ask()
+    return unit.upper() if unit is not None else None
 
 
 def query_weight() -> typing.Optional[int]:
