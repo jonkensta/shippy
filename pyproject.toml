@@ -1,3 +1,26 @@
+[project]
+name = "shippy"
+version = "0.1.0"
+description = "Inside Books Project shipping application"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "easypost>=10.1.0",
+    "pillow>=11.2.1",
+    "questionary>=2.1.0",
+    "requests>=2.32.4",
+    "pywin32>=310; sys_platform == 'win32'"
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "mypy>=1.16.1",
+    "pylint>=3.3.7",
+    "types-pywin32>=310.0.0.20250516",
+    "types-requests>=2.32.4.20250611",
+]
+
 [tool.pylint.main]
 # Analyse import fallback blocks. This can be used to support both Python 2 and 3
 # compatible code, which means that the block might have code that exists only in
@@ -539,4 +562,3 @@ redefining-builtins-modules = ["six.moves", "past.builtins", "future.builtins", 
 line-length = 88
 
 [tool.mypy]
-python_executable = "venv/bin/python"

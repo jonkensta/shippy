@@ -1,5 +1,0 @@
-black
-mypy
-pylint
-types-pywin32
-types-requests
