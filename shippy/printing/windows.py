@@ -17,9 +17,11 @@ else:
 
 if HAS_PYWIN32:
 
-    def print_image(img, printer=win32print.GetDefaultPrinter(), **kwargs):
+    def print_image(img):
         """Print a given image."""
         # pylint: disable=too-many-locals, too-many-statements, unused-argument
+
+        printer = win32print.GetDefaultPrinter()
 
         @contextlib.contextmanager
         def create_printer_context(printer_name):
@@ -94,7 +96,7 @@ if HAS_PYWIN32:
 
 else:
 
-    def print_image(img, **kwargs):  # pylint: disable=unused-argument
+    def print_image(img):  # pylint: disable=unused-argument
         """Show an image using `powershell`."""
         with build_tempfile(suffix=".png") as tmpfile:
             img.save(tmpfile.name)

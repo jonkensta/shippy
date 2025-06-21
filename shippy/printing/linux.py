@@ -5,7 +5,7 @@ import subprocess
 from ..misc import build_tempfile
 
 
-def print_image(img, **_):
+def print_image(img):
     """Show an image using `xdg-open`."""
     with build_tempfile(suffix=".png") as tmpfile:
         img.save(tmpfile.name)

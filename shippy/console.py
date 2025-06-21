@@ -15,7 +15,7 @@ def query_unit(units: typing.Dict[str, int]) -> typing.Optional[str]:
         return unit.upper() in units
 
     unit = questionary.autocomplete(
-        "Enter name of unit:", choices=units, validate=validate
+        "Enter name of unit:", choices=list(units), validate=validate
     ).ask()
 
     return unit.upper() if unit is not None else None
