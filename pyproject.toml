@@ -28,10 +28,10 @@ shippy = "shippy.cli:main"
 package = true
 
 [tool.setuptools]
-packages = ["shippy"]
+packages = ["shippy", "shippy.assets", "shippy.printing"]
 
 [tool.setuptools.package-data]
-shippy = ["assets/logo.jpg"]
+"shippy.assets" = ["*.jpg"]
 
 [tool.pylint.main]
 # Analyse import fallback blocks. This can be used to support both Python 2 and 3

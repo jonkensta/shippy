@@ -1,8 +1,8 @@
 """Printing implementation for different systems."""
 
-# pylint: disable=unused-import
-try:
-    from .win32 import print_image
+import sys
 
-except ModuleNotFoundError:
-    from .nosys import print_image  # type: ignore
+if sys.platform == "win32":
+    from .windows import print_image  # pylint: disable=unused-import
+else:
+    from .linux import print_image
