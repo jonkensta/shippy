@@ -1,4 +1,4 @@
-"""The main application."""
+"""Run the application in a CLI."""
 
 import argparse
 import configparser

@@ -21,6 +21,9 @@ dev = [
     "types-requests>=2.32.4.20250611",
 ]
 
+[project.scripts]
+shippy = "shippy.cli:main"
+
 [tool.pylint.main]
 # Analyse import fallback blocks. This can be used to support both Python 2 and 3
 # compatible code, which means that the block might have code that exists only in

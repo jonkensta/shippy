@@ -1,6 +1,6 @@
-"""The main entrypoint to the shippy."""
+"""The shippy module entrypoint."""
 
-from . import base
+from . import cli
 
 if __name__ == "__main__":
-    base.main()
+    cli.main()
