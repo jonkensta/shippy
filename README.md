@@ -4,19 +4,11 @@
 
 ## Purpose
 
-The primary goal of this utility is to provide a robust system for the Inside Books Project (IBP) to generate and print accurate shipping labels.
-It automates the postage purchasing and label creation process,
-interacting with IBP's internal server to retrieve recipient addresses and using EasyPost for carrier services.
-The application supports various shipping workflows, including bulk, individual, and manual shipments.
+The primary goal of this utility is to provide a robust system for the Inside Books Project (IBP) to generate and print accurate shipping labels. It automates the postage purchasing and label creation process, interacting with IBP's internal server to retrieve recipient addresses and using EasyPost for carrier services. The application supports various shipping workflows, including bulk, individual, and manual shipments.
 
 ## About Inside Books Project
 
-Inside Books Project is an Austin-based community service volunteer organization that sends free reading materials to people incarcerated in Texas, and
-also publishes resource guides and short-form instructional pamphlets.
-Inside Books is the only books-to-prisoners program in Texas, where more than 120,000 people are behind bars.
-Inside Books Project works
-    to promote reading, literacy, and education among incarcerated individuals and
-    to educate the general public on issues of incarceration.
+Inside Books Project is an Austin-based community service volunteer organization that sends free reading materials to people incarcerated in Texas, and also publishes resource guides and short-form instructional pamphlets. Inside Books is the only books-to-prisoners program in Texas, where more than 120,000 people are behind bars. Inside Books Project works to promote reading, literacy, and education among incarcerated individuals and to educate the general public on issues of incarceration.
 
 ## Features
 
@@ -26,72 +18,60 @@ Inside Books Project works
 - **Label Printing**: Generates and prints postage labels, with an option to include a custom logo.
 - **Error Handling**: Includes mechanisms to catch and display errors during the shipping process.
 
-## Installation
+## Installation and Development
 
-To set up the `shippy` project, ensure you have Python 3.11 installed. You can install the necessary dependencies using `pip`:
+To set up the `shippy` project for development, ensure you have [uv](https://github.com/astral-sh/uv) installed.
 
-1.  **Create a virtual environment (recommended):**
+1.  **Create and activate a virtual environment:**
 
-    ```bash
-    python -m venv venv
+    ```
+    uv venv
+    source .venv/bin/activate
     ```
 
-2.  **Activate the virtual environment:**
+    On Windows, use `.venv\Scripts\activate`.
 
-    - **On Windows:**
-      ```bash
-      .\venv\Scripts\activate
-      ```
-    - **On macOS/Linux:**
-      ```bash
-      source venv/bin/activate
-      ```
+2.  **Install dependencies:**
 
-3.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
+    The project dependencies are defined in `pyproject.toml`. Sync them using `uv`:
+
     ```
-    If you are on Windows, you may also need to install `pywin32`:
-    ```bash
-    pip install -r requirements_win.txt
+    uv sync --all-extras
     ```
 
 ## Configuration
 
-The application requires configuration details for the internal IBP server and the EasyPost API.
-These are set in the `shippy/config.ini` file:
+The application requires a configuration file for the internal IBP server and the EasyPost API.
 
-```ini
-[DEFAULT]
-testing = 1
+1.  Create a `config.ini` file.
+2.  Populate it with your API keys and server URL:
 
-[ibp]
-url = http://localhost:8000
-logo = logo.jpg
-apikey = your_ibp_api_key_here
+    ```
+    [ibp]
+    url = http://your_ibp_server_url:8000
+    apikey = your_ibp_api_key_here
 
-[easypost]
-apikey = your_easypost_api_key_here
-```
+    [easypost]
+    apikey = your_easypost_api_key_here
+    ```
 
-- `ibp.url`: Set this to the URL of your internal IBP server.
-- `ibp.apikey`: Provide your API key for the IBP server.
-- `easypost.apikey`: Enter your EasyPost API key here.
+    - `ibp.url`: The URL of your internal IBP server.
+    - `ibp.apikey`: The API key for the IBP server.
+    - `easypost.apikey`: Your EasyPost API key.
 
 ## Usage
 
-The `shippy` application can be run directly from the command line,
-with different options for bulk, individual, or manual shipping.
+The `shippy` application is run from the command line. You must specify the path to your configuration file using the `--config` option.
 
-### Running from `__main__.py`
+### Running from the Local Environment
 
-You can use the main entry point to select the shipping type:
+Once you've installed the dependencies in your virtual environment, you can run the tool using `shippy` or `python -m shippy`.
 
-```bash
-python -m shippy <shipping_type>
+```
+shippy --config path/to/your/config.ini <shipping_type>
 ```
 
-Replace `<shipping_type>` with one of the following:
+Replace `<shipping_type>` with one of the following commands:
 
 - `individual`: For shipping individual packages.
 - `bulk`: For shipping bulk packages.
@@ -99,44 +79,20 @@ Replace `<shipping_type>` with one of the following:
 
 **Example:**
 
-```bash
-python -m shippy individual
+```
+shippy --config config.ini individual
 ```
 
-### Running with specific scripts
+### Running as a Tool with `uvx`
 
-Alternatively, you can run the dedicated scripts for each shipping type located in the `scripts` directory:
+You can also run the application directly from the git repository without a local installation using `uvx`. This is useful for running the tool in different environments.
 
-- **Bulk Shipping:**
-
-  ```bash
-  python scripts/bulk.py
-  ```
-
-- **Individual Shipping:**
-
-  ```bash
-  python scripts/individual.py
-  ```
-
-- **Manual Shipping:**
-  ```bash
-  python scripts/manual.py
-  ```
-
-### PyInstaller
-
-The project also supports building single-file executables using PyInstaller for easier distribution.
-The following commands can be run from the root project directory:
-
-```bash
-pyinstaller --onefile --console --paths . --icon "shippy/logo.jpg" --add-data "shippy/logo.jpg;shippy" --add-data "shippy/config.ini;shippy" --name "SHIP BULK" "./scripts/bulk.py"
+```
+uvx --from git+https://github.com/jonkensta/shippy.git@main shippy --config path/to/your/config.ini <shipping_type>
 ```
 
-```bash
-pyinstaller --onefile --console --paths . --icon "shippy/logo.jpg" --add-data "shippy/logo.jpg;shippy" --add-data "shippy/config.ini;shippy" --name "SHIP INDIVIDUAL" "./scripts/individual.py"
-```
+**Example:**
 
-```bash
-pyinstaller --onefile --console --paths . --icon "shippy/logo.jpg" --add-data "shippy/logo.jpg;shippy" --add-data "shippy/config.ini;shippy" --name "SHIP MANUAL" "./scripts/manual.py"
+```
+uvx --from git+https://github.com/jonkensta/shippy.git@main shippy --config config.ini bulk
 ```
