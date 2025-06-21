@@ -36,7 +36,7 @@ def query_weight() -> typing.Optional[int]:
         return True
 
     weight = questionary.text("Please enter weight in pounds:", validate=validate).ask()
-    return weight and int(weight)
+    return int(weight) if weight is not None else None
 
 
 def query_request_id() -> (
