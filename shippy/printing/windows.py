@@ -1,6 +1,9 @@
 """Printing on win32 platform."""
 
 import contextlib
+import subprocess
+
+from ..misc import build_tempfile
 
 try:
     import win32print  # pylint: disable=import-error
@@ -95,4 +98,4 @@ else:
         """Show an image using `powershell`."""
         with build_tempfile(suffix=".png") as tmpfile:
             img.save(tmpfile.name)
-            subprocess.check_call(["powershell", "-c", filename])
+            subprocess.check_call(["powershell", "-c", tmpfile.name])

@@ -9,4 +9,4 @@ def print_image(img, **_):
     """Show an image using `xdg-open`."""
     with build_tempfile(suffix=".png") as tmpfile:
         img.save(tmpfile.name)
-        subprocess.check_call(["xdg-open", tmpfile])
+        subprocess.check_call(["xdg-open", tmpfile.name])
