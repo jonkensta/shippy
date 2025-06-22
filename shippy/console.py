@@ -14,8 +14,19 @@ def query_unit(units: typing.Dict[str, int]) -> typing.Optional[str]:
     def validate(unit):
         return unit.upper() in units
 
+    style = questionary.Style(
+        [
+            ("completion-menu", "bg:#2c3e50"),
+            ("completion-menu.completion", "bg:#2c3e50 #ecf0f1"),
+            ("completion-menu.completion.current", "bg:#16a085 #ecf0f1"),
+        ]
+    )
+
     unit = questionary.autocomplete(
-        "Enter name of unit:", choices=list(units), validate=validate
+        "Enter name of unit:",
+        choices=list(units),
+        validate=validate,
+        style=style,
     ).ask()
 
     return unit.upper() if unit is not None else None
