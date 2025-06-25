@@ -122,7 +122,7 @@ def task_message(msg):
         questionary.print("error!", style="fg:red", flush=True)
         raise
 
-    questionary.print("done!", style="fg:white", flush=True)
+    questionary.print("done!", style="fg:orange", flush=True)
 
 
 def catch_and_print_error(func):
