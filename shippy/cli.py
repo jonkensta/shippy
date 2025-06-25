@@ -142,7 +142,7 @@ def main():
             easypost_client.address.verify(from_addr.id)
     except easypost.errors.InvalidRequestError:
         questionary.print(
-            "\tFailed to verify return address, consider double-checking before shipping",
+            "  Failed to verify return address, consider double-checking before shipping.",
             style="fg:yellow",
         )
 
@@ -154,7 +154,7 @@ def main():
                 easypost_client.address.verify(to_addr.id)
         except easypost.errors.InvalidRequestError:
             questionary.print(
-                "\tFailed to verify address, consider double-checking before shipping",
+                "  Failed to verify address, consider double-checking before shipping.",
                 style="fg:yellow",
             )
 
