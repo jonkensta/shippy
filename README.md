@@ -96,3 +96,9 @@ uvx --from git+https://github.com/jonkensta/shippy.git@main shippy --config path
 ```
 uvx --from git+https://github.com/jonkensta/shippy.git@main shippy --config config.ini bulk
 ```
+
+To wrap the above in a powershell command, you can do the following:
+
+```
+powershell.exe -NoExit -Command "& { & 'uvx' --from 'git+https://github.com/jonkensta/shippy.git@main' 'shippy' --config 'C:\path\to\your\config.ini' 'bulk' }"
+```
