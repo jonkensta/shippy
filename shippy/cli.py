@@ -117,7 +117,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-@console.catch_and_print_error
 def main():
     """Ship to an inmate or a unit."""
 

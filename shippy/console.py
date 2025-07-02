@@ -125,22 +125,6 @@ def task_message(msg):
     questionary.print("done!", style="fg:orange", flush=True)
 
 
-def catch_and_print_error(func):
-    """Given user an opportunity to see an error before main closes."""
-
-    @functools.wraps(func)
-    def inner(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as exc:
-            traceback.print_exc()
-            questionary.print(f"Error: {exc}", style="fg:red", flush=True)
-            input("Hit any key to close")
-            raise
-
-    return inner
-
-
 WELCOME = r"""
     ________  ____     _____ __    _             _
    /  _/ __ )/ __ \   / ___// /_  (_)___  ____  (_)___  ____ _
