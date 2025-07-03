@@ -17,11 +17,53 @@ else:
 
 if HAS_PYWIN32:
 
+    def get_available_usb_printers():
+        """Get iterable of available USB printers."""
+
+        @contextlib.contextmanager
+        def open_printer(name: str):
+            """Handle printer context."""
+            try:
+                handle = win32print.OpenPrinter(name)
+                yield handle
+            finally:
+                win32print.ClosePrinter(handle)
+
+        def get_local_printers():
+            """Get iterable of local printers."""
+            for printer_info in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL):
+                printer_name = printer_info[2]
+                yield printer_name
+
+        def is_usb_printer(name: str) -> bool:
+            """Flag if printer is a USB printer."""
+            with open_printer(name) as handle:
+                details = win32print.GetPrinter(handle, 2)
+                return "USB" in details.get("pPortName", "").upper()
+
+        def is_available_printer(name: str) -> bool:
+            """Flag if printer is in 'ready' state."""
+            with open_printer(name) as handle:
+                details = win32print.GetPrinter(handle, 2)
+                status = details["Status"]
+                status_offline = 0x00000080
+                if status & status_offline:
+                    return False
+                status_not_available = 0x00001000
+                if status & status_not_available:
+                    return False
+                return True
+
+        printers = get_local_printers()
+        printers = filter(is_usb_printer, printers)
+        printers = filter(is_available_printer, printers)
+        yield from printers
+
     def print_image(img):
         """Print a given image."""
         # pylint: disable=too-many-locals, too-many-statements, unused-argument
 
-        printer = win32print.GetDefaultPrinter()
+        printer = next(get_available_usb_printers(), win32print.GetDefaultPrinter())
 
         @contextlib.contextmanager
         def create_printer_context(printer_name):
