@@ -1,8 +1,6 @@
 """Methods for console user interaction."""
 
 import contextlib
-import functools
-import traceback
 import typing
 
 import questionary
