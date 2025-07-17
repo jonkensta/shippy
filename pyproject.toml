@@ -9,7 +9,9 @@ dependencies = [
     "pillow>=11.2.1",
     "questionary>=2.1.0",
     "requests>=2.32.4",
-    "pywin32>=310; sys_platform == 'win32'"
+    "pywin32>=310; sys_platform == 'win32'",
+    "googlemaps>=4.10.0",
+    "prompt-toolkit>=3.0.51",
 ]
 
 [dependency-groups]
@@ -23,6 +25,7 @@ dev = [
 
 [project.scripts]
 shippy = "shippy.cli:main"
+autocomplete = "shippy.autocompletion:ask_for_address"
 
 [tool.uv]
 package = true
