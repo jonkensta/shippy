@@ -12,12 +12,15 @@ from PIL import Image
 
 from . import console, shipping
 from .misc import grab_png_from_url
+from .models import Config
 from .printing import print_image
 from .server import Server
 
 
-def generate_addresses_bulk(server: Server, *_):
+def generate_addresses_bulk(config: Config):
     """Generate addresses for bulk shipping."""
+    server = Server(config.ibp.url, config.ibp.apikey)
+
     with console.task_message("Grabbing units list from IBP server"):
         units = server.unit_ids()
 
@@ -39,8 +42,10 @@ def generate_addresses_bulk(server: Server, *_):
         yield to_addr, weight
 
 
-def generate_addresses_individual(server: Server, *_):
+def generate_addresses_individual(config: Config):
     """Generate addresses for individual shipping."""
+    server = Server.from_config(config.ibp)
+
     while True:
         request_id = console.query_request_id()
         if request_id is None:
@@ -55,7 +60,7 @@ def generate_addresses_individual(server: Server, *_):
         yield to_addr, weight
 
 
-def generate_addresses_manual(*_):
+def generate_addresses_manual(config: Config):
     """Generate addresses for manual shipping."""
     while True:
         to_addr = console.query_address()
@@ -75,10 +80,16 @@ def load_logo() -> Image.Image:
     return Image.open(str(logo_fpath))
 
 
-def load_config(filepath: pathlib.Path) -> configparser.ConfigParser:
-    """Load config file."""
-    config = configparser.ConfigParser()
-    config.read(filepath)
+def load_config(filepath: pathlib.Path) -> Config:
+    """Load and validate the config file."""
+    parser = configparser.ConfigParser()
+    parser.read(filepath)
+
+    config_dict = {
+        section: dict(parser.items(section)) for section in parser.sections()
+    }
+    config = Config.model_validate(config_dict)
+
     return config
 
 
@@ -115,8 +126,8 @@ def main():
     args = build_parser().parse_args()
     config = load_config(args.config)
 
-    easypost_client = easypost.EasyPostClient(config["easypost"]["apikey"])
-    server = Server(config["ibp"]["url"], config["ibp"]["apikey"])
+    easypost_client = easypost.EasyPostClient(config.easypost.apikey)
+    server = Server(config.ibp.url, config.ibp.apikey)
 
     logo = load_logo()
 
@@ -137,7 +148,7 @@ def main():
             style="fg:yellow",
         )
 
-    for to_addr_dict, weight in args.generate_addresses(server):
+    for to_addr_dict, weight in args.generate_addresses(config):
         to_addr = shipping.build_address(easypost_client, **to_addr_dict)
 
         try:

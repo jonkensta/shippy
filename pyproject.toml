@@ -12,6 +12,7 @@ dependencies = [
     "pywin32>=310; sys_platform == 'win32'",
     "googlemaps>=4.10.0",
     "prompt-toolkit>=3.0.51",
+    "pydantic>=2.11.7",
 ]
 
 [dependency-groups]
