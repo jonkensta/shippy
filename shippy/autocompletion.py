@@ -69,7 +69,7 @@ class GoogleMapsCompleter(Completer):
         yield from predictions
 
 
-def ask_for_address():
+def demo():
     """Prompts the user for an address using the custom completer."""
 
     api_key = os.getenv("Maps_API_KEY")

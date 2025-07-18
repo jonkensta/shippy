@@ -25,7 +25,7 @@ dev = [
 
 [project.scripts]
 shippy = "shippy.cli:main"
-autocomplete = "shippy.autocompletion:ask_for_address"
+autocomplete = "shippy.autocompletion:demo"
 
 [tool.uv]
 package = true
