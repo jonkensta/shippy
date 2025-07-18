@@ -36,10 +36,7 @@ def generate_addresses_bulk(server: Server, *_):
         if weight is None:
             continue
 
-        def ship_shipment(shipment):
-            return server.ship(shipment, unit_autoid=unit_id)
-
-        yield to_addr, weight, ship_shipment
+        yield to_addr, weight
 
 
 def generate_addresses_individual(server: Server, *_):
@@ -55,10 +52,7 @@ def generate_addresses_individual(server: Server, *_):
         if weight is None:
             continue
 
-        def ship_shipment(shipment):
-            return server.ship(shipment, request_ids=[request_id])
-
-        yield to_addr, weight, ship_shipment
+        yield to_addr, weight
 
 
 def generate_addresses_manual(*_):
@@ -68,13 +62,11 @@ def generate_addresses_manual(*_):
         if not to_addr:
             continue
 
-        ship_shipment = None
-
         weight = console.query_weight()
         if weight is None:
             continue
 
-        yield to_addr, weight, ship_shipment
+        yield to_addr, weight
 
 
 def load_logo() -> Image.Image:
@@ -145,7 +137,7 @@ def main():
             style="fg:yellow",
         )
 
-    for to_addr_dict, weight, ship_shipment in args.generate_addresses(server):
+    for to_addr_dict, weight in args.generate_addresses(server):
         to_addr = shipping.build_address(easypost_client, **to_addr_dict)
 
         try:
@@ -175,10 +167,6 @@ def main():
                 raise
 
         with request_refund_on_error(shipment):
-            if ship_shipment is not None:
-                with console.task_message("Registering shipment to IBP server"):
-                    ship_shipment(shipment)
-
             with console.task_message("Printing postage"):
                 label_url = shipment.postage_label.label_url
                 image = grab_png_from_url(label_url)
