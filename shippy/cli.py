@@ -6,7 +6,8 @@ import contextlib
 import importlib.resources
 import pathlib
 
-import easypost
+import easypost  # type: ignore
+import googlemaps  # type: ignore
 import questionary
 from PIL import Image
 
@@ -19,7 +20,7 @@ from .server import Server
 
 def generate_addresses_bulk(config: Config):
     """Generate addresses for bulk shipping."""
-    server = Server(config.ibp.url, config.ibp.apikey)
+    server = Server.from_config(config.ibp)
 
     with console.task_message("Grabbing units list from IBP server"):
         units = server.unit_ids()
@@ -62,8 +63,10 @@ def generate_addresses_individual(config: Config):
 
 def generate_addresses_manual(config: Config):
     """Generate addresses for manual shipping."""
+    gmaps = googlemaps.Client(key=config.googlemaps.apikey)
+
     while True:
-        to_addr = console.query_address()
+        to_addr = console.query_address(gmaps)
         if not to_addr:
             continue
 
@@ -127,7 +130,7 @@ def main():
     config = load_config(args.config)
 
     easypost_client = easypost.EasyPostClient(config.easypost.apikey)
-    server = Server(config.ibp.url, config.ibp.apikey)
+    server = Server.from_config(config.ibp)
 
     logo = load_logo()
 

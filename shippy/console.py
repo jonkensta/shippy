@@ -3,7 +3,12 @@
 import contextlib
 import typing
 
+import googlemaps  # type: ignore
 import questionary
+from prompt_toolkit.completion import ThreadedCompleter
+
+from .addresses import AddressParser
+from .autocompletion import GoogleMapsCompleter
 
 
 def query_unit(units: typing.Dict[str, int]) -> typing.Optional[str]:
@@ -86,26 +91,37 @@ def query_request_id() -> (
     return jurisdiction, int(inmate_id), int(index)
 
 
-def query_address() -> typing.Optional[typing.Dict[str, str]]:
+def query_address(gmaps: googlemaps.Client) -> typing.Optional[typing.Dict[str, str]]:
     """Query an address from the user."""
-    prompts = {
-        "name": "Enter name:",
-        "company": "Enter company name:",
-        "street1": "Enter street1:",
-        "street2": "Enter street2:",
-        "city": "Enter city:",
-        "state": "Enter state:",
-        "zipcode": "Enter zipcode:",
-    }
+    name = questionary.text("Enter name:").ask()
+    if name is None:
+        return None
 
-    questions = {name: questionary.text(prompt) for name, prompt in prompts.items()}
+    company = questionary.text("Enter company:").ask()
+    if company is None:
+        return None
 
-    address = {}
-    for name, question in questions.items():
-        response = question.ask()
-        if response is None:
-            return None
-        address[name] = response
+    gmaps_completer = GoogleMapsCompleter(gmaps)
+    threaded_completer = ThreadedCompleter(gmaps_completer)
+
+    def validate(text):
+        return True if len(text) > 0 else "Please enter an address."
+
+    address_text = questionary.autocomplete(
+        "Enter address:",
+        choices=[],
+        completer=threaded_completer,
+        validate=validate,
+    ).ask()
+
+    if address_text is None:
+        return None
+
+    parse_address = AddressParser(gmaps)
+    address = parse_address(address_text)
+
+    address["name"] = name
+    address["company"] = company
 
     return address
 
