@@ -111,3 +111,6 @@ venv.bak/
 
 # flake8
 .flake8
+
+# config file
+config.ini
