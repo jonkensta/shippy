@@ -20,6 +20,7 @@ class AddressParser:
 
         component_map = {
             "street_number": ("long_name", "street_number"),
+            "subpremise": ("long_name", "street2"),
             "route": ("long_name", "street_name"),
             "locality": ("long_name", "city"),
             "administrative_area_level_1": ("short_name", "state"),
