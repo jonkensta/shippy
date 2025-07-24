@@ -8,7 +8,7 @@ from ..misc import build_tempfile
 try:
     import win32print  # pylint: disable=import-error
     import win32ui  # pylint: disable=import-error
-    import wmi  # pylint: disable=import-error
+    import wmi  # type: ignore
     from PIL import ImageWin
 except ImportError:
     HAS_PYWIN32 = False
