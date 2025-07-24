@@ -8,6 +8,7 @@ from ..misc import build_tempfile
 try:
     import win32print  # pylint: disable=import-error
     import win32ui  # pylint: disable=import-error
+    import wmi  # pylint: disable=import-error
     from PIL import ImageWin
 except ImportError:
     HAS_PYWIN32 = False
@@ -42,17 +43,12 @@ if HAS_PYWIN32:
                 return "USB" in details.get("pPortName", "").upper()
 
         def is_available_printer(name: str) -> bool:
-            """Flag if printer is in 'ready' state."""
-            with open_printer(name) as handle:
-                details = win32print.GetPrinter(handle, 2)
-                status = details["Status"]
-                status_offline = 0x00000080
-                if status & status_offline:
-                    return False
-                status_not_available = 0x00001000
-                if status & status_not_available:
-                    return False
-                return True
+            """Flag if printer is has a corresponding PNP entity."""
+            entities = wmi.WMI().query(
+                f"SELECT * from Win32_PnPEntity"
+                f"WHERE Name = '{name}' AND PNPDeviceID LIKE 'USBPRINT%'"
+            )
+            return len(entities) > 0
 
         printers = get_local_printers()
         printers = filter(is_usb_printer, printers)
