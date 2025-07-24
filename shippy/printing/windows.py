@@ -63,7 +63,7 @@ if HAS_PYWIN32:
         """Print a given image."""
         # pylint: disable=too-many-locals, too-many-statements, unused-argument
 
-        printer = next(get_available_usb_printers(), win32print.GetDefaultPrinter())
+        printer = win32print.GetDefaultPrinter()
 
         @contextlib.contextmanager
         def create_printer_context(printer_name):
