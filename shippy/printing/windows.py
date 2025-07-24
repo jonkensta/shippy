@@ -45,7 +45,7 @@ if HAS_PYWIN32:
         def is_available_printer(name: str) -> bool:
             """Flag if printer is has a corresponding PNP entity."""
             entities = wmi.WMI().query(
-                f"SELECT * from Win32_PnPEntity"
+                "SELECT * from Win32_PnPEntity "
                 f"WHERE Name = '{name}' AND PNPDeviceID LIKE 'USBPRINT%'"
             )
             return len(entities) > 0
