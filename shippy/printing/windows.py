@@ -59,9 +59,8 @@ if HAS_PYWIN32:
         printers = filter(is_available_printer, printers)
         yield from printers
 
-    def print_image(img):
+    def print_image(img):  # pylint: disable=too-many-locals
         """Print a given image."""
-        # pylint: disable=too-many-locals, too-many-statements, unused-argument
 
         printer = win32print.GetDefaultPrinter()
 
