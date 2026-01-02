@@ -126,6 +126,52 @@ def query_address(gmaps: googlemaps.Client) -> typing.Optional[typing.Dict[str, 
     return address
 
 
+def query_barcode_or_id() -> typing.Optional[str]:
+    """
+    Query user for barcode or inmate ID.
+
+    Accepts:
+        - Barcode format: TEX-12345678-0 or FED-12345678-0
+        - Inmate ID: any digit string
+        - Legacy request ID: any integer (fallback if not found in inmates DB)
+    """
+    user_input = questionary.text(
+        "Enter barcode, inmate ID, or legacy request ID:",
+        validate=lambda x: True if x.strip() else "Input cannot be empty",
+    ).ask()
+
+    return user_input.strip() if user_input else None
+
+
+def select_jurisdiction(
+    candidates: typing.List[typing.Tuple[str, typing.Dict]]
+) -> typing.Optional[typing.Dict]:
+    """
+    Prompt user to select from multiple inmate matches.
+
+    Args:
+        candidates: List of (jurisdiction, inmate_data) tuples
+
+    Returns:
+        Selected inmate data or None if cancelled
+    """
+    choices = []
+    for jurisdiction, inmate in candidates:
+        first_name = inmate.get("first_name", "")
+        last_name = inmate.get("last_name", "")
+        inmate_id = inmate["id"]
+        name = f"{first_name} {last_name}".strip() or "Unknown"
+        choices.append(
+            {"name": f"{jurisdiction} - {name} ({inmate_id})", "value": inmate}
+        )
+
+    result = questionary.select(
+        "Multiple inmates found. Please select one:", choices=choices
+    ).ask()
+
+    return result
+
+
 @contextlib.contextmanager
 def task_message(msg):
     """Capture a task context with messaging."""
