@@ -48,17 +48,47 @@ def generate_addresses_individual(config: Config):
     server = Server.from_config(config.ibp)
 
     while True:
-        request_id = console.query_request_id()
-        if request_id is None:
+        user_input = console.query_barcode_or_id()
+        if user_input is None:
             continue
 
-        to_addr = server.request_address(request_id)
+        try:
+            result, strategy = server.find_inmate(user_input)
 
-        weight = console.query_weight()
-        if weight is None:
+            # Handle multiple matches case
+            if strategy == "multiple_matches":
+                inmate = console.select_jurisdiction(result)
+                if inmate is None:
+                    continue
+                questionary.print(f"  Selected inmate from database", style="fg:green")
+            else:
+                inmate = result
+                questionary.print(f"  Found inmate using {strategy}", style="fg:green")
+
+            # Extract address from inmate data
+            unit = inmate["unit"]
+            first_name = inmate.get("first_name", "")
+            last_name = inmate.get("last_name", "")
+            inmate_name = f"{first_name} {last_name}".strip()
+
+            to_addr = {
+                "name": inmate_name or f"Inmate #{inmate['id']}",
+                "street1": unit["street1"],
+                "street2": unit.get("street2", ""),
+                "city": unit["city"],
+                "state": unit["state"],
+                "zipcode": unit["zipcode"],
+            }
+
+            weight = console.query_weight()
+            if weight is None:
+                continue
+
+            yield to_addr, weight
+
+        except ValueError as e:
+            questionary.print(f"  {str(e)}", style="fg:red")
             continue
-
-        yield to_addr, weight
 
 
 def generate_addresses_manual(config: Config):
@@ -130,7 +160,6 @@ def main():
     config = load_config(args.config)
 
     easypost_client = easypost.EasyPostClient(config.easypost.apikey)
-    server = Server.from_config(config.ibp)
 
     logo = load_logo()
 
@@ -139,8 +168,16 @@ def main():
         "\nWelcome! Answer prompts to print postage, hit CTRL+C to cancel and restart\n"
     )
 
-    with console.task_message("Grabbing return address from IBP server"):
-        from_addr = shipping.build_address(easypost_client, **server.return_address())
+    with console.task_message("Loading return address from config"):
+        from_addr = shipping.build_address(
+            easypost_client,
+            name=config.return_address.name,
+            street1=config.return_address.street1,
+            street2=config.return_address.street2,
+            city=config.return_address.city,
+            state=config.return_address.state,
+            zipcode=config.return_address.zipcode,
+        )
 
     try:
         with console.task_message("Verifying return address"):
