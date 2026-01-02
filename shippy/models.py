@@ -7,7 +7,17 @@ class IbpConfig(BaseModel):
     """Model for IBP configuration."""
 
     url: HttpUrl
-    apikey: str
+
+
+class ReturnAddressConfig(BaseModel):
+    """Model for return address configuration."""
+
+    name: str
+    street1: str
+    street2: str = ""
+    city: str
+    state: str
+    zipcode: str
 
 
 class EasypostConfig(BaseModel):
@@ -28,3 +38,4 @@ class Config(BaseModel):
     ibp: IbpConfig
     easypost: EasypostConfig
     googlemaps: GoogleMapsConfig
+    return_address: ReturnAddressConfig
