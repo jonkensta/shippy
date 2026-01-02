@@ -51,11 +51,11 @@ class Server:
         units = self._get("units")
         unit_map = {}
         for unit in units:
-            jurisdiction = unit['jurisdiction']
+            jurisdiction = unit["jurisdiction"]
             # Only include Texas units (Federal inmates receive individual packages only)
             if jurisdiction != "Texas":
                 continue
-            name = unit['name']
+            name = unit["name"]
             composite_id = f"{jurisdiction}-{name}"
             unit_map[name.upper()] = composite_id
         return unit_map
@@ -70,7 +70,7 @@ class Server:
         Returns:
             dict with address fields: name, street1, street2, city, state, zipcode
         """
-        parts = composite_id.split('-', 1)
+        parts = composite_id.split("-", 1)
         if len(parts) != 2:
             raise ValueError(f"Invalid composite_id format: {composite_id}")
         jurisdiction, name = parts
@@ -82,15 +82,17 @@ class Server:
 
         # Extract address fields from unit object
         return {
-            'name': 'ATTN: Mailroom Staff',
-            'street1': unit['street1'],
-            'street2': unit.get('street2', ''),
-            'city': unit['city'],
-            'state': unit['state'],
-            'zipcode': unit['zipcode'],
+            "name": "ATTN: Mailroom Staff",
+            "street1": unit["street1"],
+            "street2": unit.get("street2", ""),
+            "city": unit["city"],
+            "state": unit["state"],
+            "zipcode": unit["zipcode"],
         }
 
-    def find_inmate(self, user_input: str) -> tuple[dict, str] | tuple[list[tuple[str, dict]], str]:
+    def find_inmate(
+        self, user_input: str
+    ) -> tuple[dict, str] | tuple[list[tuple[str, dict]], str]:
         """
         Find inmate using multiple strategies.
 
@@ -107,8 +109,10 @@ class Server:
         # Strategy 1: Try as barcode format (TEX-12345678-0 or FED-12345678-0)
         if user_input.startswith(("TEX-", "FED-")):
             try:
-                parts = user_input.split('-')
-                if len(parts) >= 2:  # At minimum: code-inmateID, optionally: code-inmateID-index
+                parts = user_input.split("-")
+                if (
+                    len(parts) >= 2
+                ):  # At minimum: code-inmateID, optionally: code-inmateID-index
                     code = parts[0]
                     inmate_id_str = parts[1]
                     # Ignore index (parts[2]) if present

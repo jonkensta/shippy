@@ -144,7 +144,7 @@ def query_barcode_or_id() -> typing.Optional[str]:
 
 
 def select_jurisdiction(
-    candidates: typing.List[typing.Tuple[str, typing.Dict]]
+    candidates: typing.List[typing.Tuple[str, typing.Dict]],
 ) -> typing.Optional[typing.Dict]:
     """
     Prompt user to select from multiple inmate matches.
