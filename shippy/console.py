@@ -53,44 +53,6 @@ def query_weight() -> typing.Optional[int]:
     return int(weight) if weight is not None else None
 
 
-def query_request_id() -> (
-    typing.Optional[typing.Union[typing.Tuple[str, int, int], int]]
-):
-    """Query a request ID from the user."""
-
-    def validate(request_id):
-        try:
-            _, inmate_id, index = request_id.split("-")
-        except ValueError:
-            try:
-                int(request_id)
-            except ValueError:
-                return "Request ID must be an integer."
-
-            return True
-
-        try:
-            int(inmate_id), int(index)
-        except ValueError:
-            return "Inmate ID and index must be an integer."
-
-        return True
-
-    request_id = questionary.text(
-        "Please enter the request ID:", validate=validate
-    ).ask()
-
-    if request_id is None:
-        return None
-
-    try:
-        jurisdiction, inmate_id, index = request_id.split("-")
-    except ValueError:
-        return int(request_id)
-
-    return jurisdiction, int(inmate_id), int(index)
-
-
 def query_address(gmaps: googlemaps.Client) -> typing.Optional[typing.Dict[str, str]]:
     """Query an address from the user."""
     name = questionary.text("Enter name:").ask()
