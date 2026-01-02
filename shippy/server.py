@@ -1,5 +1,6 @@
 """IBP server API abstraction."""
 
+from typing import Any, cast
 from urllib.parse import urljoin, quote
 
 import requests
@@ -33,7 +34,7 @@ class Server:
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 404:
                 raise ValueError(f"Resource not found: {path}") from e
-            elif e.response.status_code == 400:
+            if e.response.status_code == 400:
                 raise ValueError(f"Invalid request: {path}") from e
             raise
         except requests.exceptions.ConnectionError as e:
@@ -48,7 +49,7 @@ class Server:
         Returns:
             dict mapping uppercase unit name to composite ID 'Jurisdiction-Name'
         """
-        units = self._get("units")
+        units = cast(list[dict[str, Any]], self._get("units"))
         unit_map = {}
         for unit in units:
             jurisdiction = unit["jurisdiction"]
@@ -78,9 +79,11 @@ class Server:
         # URL encode the name to handle spaces
         encoded_name = quote(name)
 
-        unit = self._get(f"units/{jurisdiction}/{encoded_name}")
+        unit = cast(dict[str, Any], self._get(f"units/{jurisdiction}/{encoded_name}"))
 
         # Extract address fields from unit object
+        # Standard address dictionary construction pattern used throughout codebase
+        # pylint: disable=duplicate-code
         return {
             "name": "ATTN: Mailroom Staff",
             "street1": unit["street1"],
@@ -92,7 +95,7 @@ class Server:
 
     def find_inmate(
         self, user_input: str
-    ) -> tuple[dict, str] | tuple[list[tuple[str, dict]], str]:
+    ) -> tuple[dict[str, Any], str] | tuple[list[tuple[str, dict[str, Any]]], str]:
         """
         Find inmate using multiple strategies.
 
@@ -118,36 +121,45 @@ class Server:
                     # Ignore index (parts[2]) if present
                     jurisdiction = "Texas" if code == "TEX" else "Federal"
                     inmate_id = int(inmate_id_str)
-                    inmate = self._get(f"inmates/{jurisdiction}/{inmate_id}")
+                    inmate = cast(
+                        dict[str, Any], self._get(f"inmates/{jurisdiction}/{inmate_id}")
+                    )
                     return inmate, f"barcode ({user_input})"
-            except Exception:
-                pass  # Fall through to next strategy
+            except (ValueError, requests.exceptions.RequestException, KeyError):
+                # Fall through to next strategy if barcode parsing/lookup fails
+                pass
 
         # Strategy 2: Try as inmate ID (any digit string)
         if user_input.isdigit():
             inmate_id = int(user_input)
-            candidates = []
+            candidates: list[tuple[str, dict[str, Any]]] = []
 
             # Try both jurisdictions
             for jurisdiction in ["Texas", "Federal"]:
                 try:
-                    inmate = self._get(f"inmates/{jurisdiction}/{inmate_id}")
+                    inmate = cast(
+                        dict[str, Any], self._get(f"inmates/{jurisdiction}/{inmate_id}")
+                    )
                     candidates.append((jurisdiction, inmate))
-                except Exception:
-                    pass  # Inmate not in this jurisdiction
+                except (ValueError, requests.exceptions.RequestException, KeyError):
+                    # Inmate not in this jurisdiction, continue to next
+                    pass
 
             if len(candidates) == 1:
                 jurisdiction, inmate = candidates[0]
                 return inmate, f"inmate ID ({jurisdiction}-{inmate_id})"
-            elif len(candidates) > 1:
+            if len(candidates) > 1:
                 # Multiple matches - need user to choose
                 return candidates, "multiple_matches"
 
             # Strategy 3: If no inmates found, try as legacy request_id
             try:
-                inmate = self._get(f"inmates/by-request/{inmate_id}")
+                inmate = cast(
+                    dict[str, Any], self._get(f"inmates/by-request/{inmate_id}")
+                )
                 return inmate, f"legacy request ID ({inmate_id})"
-            except Exception:
+            except (ValueError, requests.exceptions.RequestException, KeyError):
+                # Legacy lookup failed, fall through to error
                 pass
 
         # All strategies failed

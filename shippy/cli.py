@@ -57,11 +57,15 @@ def generate_addresses_individual(config: Config):
 
             # Handle multiple matches case
             if strategy == "multiple_matches":
+                # Type narrowing: when strategy is "multiple_matches", result is a list
+                assert isinstance(result, list)
                 inmate = console.select_jurisdiction(result)
                 if inmate is None:
                     continue
-                questionary.print(f"  Selected inmate from database", style="fg:green")
+                questionary.print("  Selected inmate from database", style="fg:green")
             else:
+                # Type narrowing: otherwise, result is a dict
+                assert isinstance(result, dict)
                 inmate = result
                 questionary.print(f"  Found inmate using {strategy}", style="fg:green")
 
@@ -71,6 +75,8 @@ def generate_addresses_individual(config: Config):
             last_name = inmate.get("last_name", "")
             inmate_name = f"{first_name} {last_name}".strip()
 
+            # Standard address dictionary construction pattern used throughout codebase
+            # pylint: disable=duplicate-code
             to_addr = {
                 "name": inmate_name or f"Inmate #{inmate['id']}",
                 "street1": unit["street1"],

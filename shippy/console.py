@@ -11,7 +11,7 @@ from .addresses import AddressParser
 from .autocompletion import GoogleMapsCompleter
 
 
-def query_unit(units: typing.Dict[str, int]) -> typing.Optional[str]:
+def query_unit(units: typing.Dict[str, str]) -> typing.Optional[str]:
     """Query a name of a unit from the user."""
 
     def validate(unit):
