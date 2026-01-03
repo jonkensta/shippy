@@ -9,4 +9,10 @@ def print_image(img):
     """Show an image using `xdg-open`."""
     with build_tempfile(suffix=".png") as tmpfile:
         img.save(tmpfile.name)
-        subprocess.check_call(["xdg-open", tmpfile.name])
+        # Suppress stderr to hide harmless error messages from Chromium-based viewers
+        # (GCM deprecated endpoint, SSL handshake failures)
+        subprocess.check_call(
+            ["xdg-open", tmpfile.name],
+            stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+        )
