@@ -1,6 +1,7 @@
 """Printing on win32 platform."""
 
 import contextlib
+import re
 import subprocess
 
 from ..misc import build_tempfile
@@ -18,47 +19,42 @@ else:
 
 if HAS_PYWIN32:
 
-    def get_available_usb_printers():
-        """Get iterable of available USB printers."""
+    _VID_PID_RE = re.compile(r"[\s\-_]([0-9A-Fa-f]{4}):([0-9A-Fa-f]{4})$")
 
-        @contextlib.contextmanager
-        def open_printer(name: str):
-            """Handle printer context."""
-            try:
-                handle = win32print.OpenPrinter(name)
-                yield handle
-            finally:
-                win32print.ClosePrinter(handle)
+    def get_available_usb_printers():
+        """Get iterable of available USB label printers that are currently plugged in."""
 
         def get_local_printers():
             """Get iterable of local printers."""
             for printer_info in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL):
-                printer_name = printer_info[2]
-                yield printer_name
+                yield printer_info[2]
 
-        def is_usb_printer(name: str) -> bool:
-            """Flag if printer is a USB printer."""
-            with open_printer(name) as handle:
-                details = win32print.GetPrinter(handle, 2)
-                return "USB" in details.get("pPortName", "").upper()
+        def extract_vid_pid(name: str):
+            """Return (vid, pid) strings from printer name, or None if not a label printer."""
+            match = _VID_PID_RE.search(name)
+            if match:
+                return match.group(1).upper(), match.group(2).upper()
+            return None
 
-        def is_available_printer(name: str) -> bool:
-            """Flag if printer is has a corresponding PNP entity."""
+        def is_plugged_in(vid: str, pid: str) -> bool:
+            """Check if a USB device with given VID:PID is currently connected."""
             entities = wmi.WMI().query(
-                "SELECT * from Win32_PnPEntity "
-                f"WHERE Name = '{name}' AND PNPDeviceID LIKE 'USBPRINT%'"
+                "SELECT * FROM Win32_PnPEntity "
+                f"WHERE PNPDeviceID LIKE '%VID_{vid}&PID_{pid}%'"
             )
             return len(entities) > 0
 
-        printers = get_local_printers()
-        printers = filter(is_usb_printer, printers)
-        printers = filter(is_available_printer, printers)
-        yield from printers
+        for name in get_local_printers():
+            vid_pid = extract_vid_pid(name)
+            if vid_pid is not None and is_plugged_in(*vid_pid):
+                yield name
 
     def print_image(img):  # pylint: disable=too-many-locals
         """Print a given image."""
 
-        printer = next(get_available_usb_printers(), win32print.GetDefaultPrinter())
+        printer = next(get_available_usb_printers(), None)
+        if printer is None:
+            raise RuntimeError("No label printer found plugged in")
 
         @contextlib.contextmanager
         def create_printer_context(printer_name):

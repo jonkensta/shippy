@@ -181,11 +181,15 @@ def main():
                 raise
 
         with request_refund_on_error(shipment):
-            with console.task_message("Printing postage"):
-                label_url = shipment.postage_label.label_url
-                image = grab_png_from_url(label_url)
+            try:
+                with console.task_message("Printing postage"):
+                    label_url = shipment.postage_label.label_url
+                    image = grab_png_from_url(label_url)
 
-                if logo is not None:
-                    image.paste(logo, (450, 425))
+                    if logo is not None:
+                        image.paste(logo, (450, 425))
 
-                print_image(image)
+                    print_image(image)
+            except RuntimeError as exc:
+                questionary.print(f"  Error: {exc}", style="fg:red")
+                raise
