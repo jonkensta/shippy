@@ -6,9 +6,9 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "easypost>=10.1.0",
-    "pillow>=11.2.1",
+    "pillow>=12.2.0",
     "questionary>=2.1.0",
-    "requests>=2.32.4",
+    "requests>=2.33.0",
     "pywin32>=310; sys_platform == 'win32'",
     "WMI>=1.5.1; sys_platform == 'win32'",
     "googlemaps>=4.10.0",
@@ -18,7 +18,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "black>=25.1.0",
+    "black>=26.3.1",
     "mypy>=1.16.1",
     "pylint>=3.3.7",
     "types-pywin32>=310.0.0.20250516",
