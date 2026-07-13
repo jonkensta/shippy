@@ -167,7 +167,7 @@ def main():
 
         with console.task_message("Purchasing postage"):
             shipment = shipping.build_shipment(
-                easypost_client, from_addr, to_addr, weight
+                easypost_client, from_addr, to_addr, weight, config.parcel
             )
 
         @contextlib.contextmanager

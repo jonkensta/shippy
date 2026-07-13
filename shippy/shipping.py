@@ -4,6 +4,8 @@ from easypost import EasyPostClient
 from easypost.models import Address as EasyPostAddress
 from easypost.models import Shipment as EasyPostShipment
 
+from .models import ParcelConfig
+
 
 def build_address(client: EasyPostClient, **kwargs) -> EasyPostAddress:
     """Build easypost Address."""
@@ -18,9 +20,16 @@ def build_shipment(
     from_address: EasyPostAddress,
     to_address: EasyPostAddress,
     weight: int,
+    parcel_config: ParcelConfig,
 ) -> EasyPostShipment:
-    """Purchase postage given addresses and weight in ounces."""
-    parcel = client.parcel.create(predefined_package="Parcel", weight=weight)
+    """Purchase postage given addresses, weight in ounces, and parcel dimensions."""
+    parcel = client.parcel.create(
+        predefined_package="Parcel",
+        weight=weight,
+        length=parcel_config.length,
+        width=parcel_config.width,
+        height=parcel_config.height,
+    )
     shipment = client.shipment.create(
         from_address=from_address,
         to_address=to_address,
