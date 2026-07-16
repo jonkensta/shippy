@@ -86,9 +86,7 @@ if HAS_PYWIN32:
         """Return report lines describing every local print queue and its gate results."""
         lines = ["-- Local print queues (EnumPrinters LOCAL, level 2) --"]
         try:
-            printers = win32print.EnumPrinters(
-                win32print.PRINTER_ENUM_LOCAL, None, 2
-            )
+            printers = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL, None, 2)
         except Exception as exc:  # pylint: disable=broad-except
             lines.append(f"  ERROR enumerating printers: {exc!r}")
             return lines
@@ -130,9 +128,7 @@ if HAS_PYWIN32:
                     f"        gate 2 (USB present VID_{vid}&PID_{pid}): "
                     f"{'YES' if present else 'NO'}"
                 )
-                lines.append(
-                    f"        => would be used: {'YES' if present else 'NO'}"
-                )
+                lines.append(f"        => would be used: {'YES' if present else 'NO'}")
             except Exception as exc:  # pylint: disable=broad-except
                 lines.append(f"        gate 2 (USB present): ERROR {exc!r}")
                 lines.append("        => would be used: UNKNOWN (WMI error)")

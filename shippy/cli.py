@@ -105,9 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build an arguments parser."""
     parser = argparse.ArgumentParser(description=main.__doc__)
 
-    parser.add_argument(
-        "--config", type=pathlib.Path, help="Configuration file path"
-    )
+    parser.add_argument("--config", type=pathlib.Path, help="Configuration file path")
 
     subparsers = parser.add_subparsers(
         dest="shipping_type", required=True, help="Select command"
@@ -140,9 +138,8 @@ def main():
     args = parser.parse_args()
 
     # Utility subcommands (e.g. diagnose-printer) run without config and exit.
-    command = getattr(args, "func", None)
-    if command is not None:
-        command(args)
+    if getattr(args, "func", None) is not None:
+        args.func(args)
         return
 
     if args.config is None:

@@ -3,6 +3,8 @@
 import sys
 
 if sys.platform == "win32":
-    from .windows import print_image, snapshot_printer_state  # pylint: disable=unused-import
+    from .windows import print_image  # pylint: disable=unused-import
+    from .windows import snapshot_printer_state  # pylint: disable=unused-import
 else:
-    from .linux import print_image, snapshot_printer_state  # pylint: disable=unused-import
+    from .linux import print_image  # pylint: disable=unused-import
+    from .linux import snapshot_printer_state  # pylint: disable=unused-import
