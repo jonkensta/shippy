@@ -102,3 +102,27 @@ To wrap the above in a powershell command, you can do the following:
 ```
 powershell.exe -NoExit -Command "& { & 'uvx' --from 'git+https://github.com/jonkensta/shippy.git@main' 'shippy' --config 'C:\path\to\your\config.ini' 'bulk' }"
 ```
+
+## Troubleshooting the label printer
+
+If shipping fails with **"No label printer found plugged in"** even though the
+printer is powered and connected, run the `diagnose-printer` command to capture a
+snapshot of the printer and USB state. It needs no config file:
+
+```
+shippy diagnose-printer
+```
+
+Or via `uvx`:
+
+```
+uvx --from git+https://github.com/jonkensta/shippy.git@main shippy diagnose-printer
+```
+
+Run it **while the problem is happening** and send back the output. For every
+label printer it reports the two checks that must both pass — whether the Windows
+queue name carries the expected `VID:PID` suffix, and whether that USB device is
+currently enumerated in Windows — so the report shows exactly which check is
+failing. The same snapshot is also appended automatically to
+`%LOCALAPPDATA%\shippy\printer-diagnostics.log` every time the error is raised,
+so that file is worth collecting after an incident as well.

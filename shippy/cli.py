@@ -14,7 +14,7 @@ from PIL import Image
 from . import console, shipping
 from .misc import grab_png_from_url
 from .models import Config
-from .printing import print_image
+from .printing import print_image, snapshot_printer_state
 from .server import Server
 
 
@@ -77,6 +77,11 @@ def generate_addresses_manual(config: Config):
         yield to_addr, weight
 
 
+def run_diagnose_printer(_args):
+    """Print a snapshot of printer/USB state to help debug detection failures."""
+    print(snapshot_printer_state())
+
+
 def load_logo() -> Image.Image:
     """Load logo image."""
     logo_fpath = importlib.resources.files("shippy.assets").joinpath("logo.jpg")
@@ -101,11 +106,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=main.__doc__)
 
     parser.add_argument(
-        "--config", type=pathlib.Path, required=True, help="Configuration file path"
+        "--config", type=pathlib.Path, help="Configuration file path"
     )
 
     subparsers = parser.add_subparsers(
-        dest="shipping_type", required=True, help="Select shipping type"
+        dest="shipping_type", required=True, help="Select command"
     )
 
     subparsers.add_parser("individual", help="ship individual packages").set_defaults(
@@ -120,13 +125,29 @@ def build_parser() -> argparse.ArgumentParser:
         generate_addresses=generate_addresses_manual
     )
 
+    subparsers.add_parser(
+        "diagnose-printer",
+        help="print a snapshot of printer/USB state (no config needed)",
+    ).set_defaults(func=run_diagnose_printer)
+
     return parser
 
 
 def main():
     """Ship to an inmate or a unit."""
 
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+
+    # Utility subcommands (e.g. diagnose-printer) run without config and exit.
+    command = getattr(args, "func", None)
+    if command is not None:
+        command(args)
+        return
+
+    if args.config is None:
+        parser.error("--config is required for shipping commands")
+
     config = load_config(args.config)
 
     easypost_client = easypost.EasyPostClient(config.easypost.apikey)
