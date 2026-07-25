@@ -103,6 +103,44 @@ To wrap the above in a powershell command, you can do the following:
 powershell.exe -NoExit -Command "& { & 'uvx' --from 'git+https://github.com/jonkensta/shippy.git@main' 'shippy' --config 'C:\path\to\your\config.ini' 'bulk' }"
 ```
 
+## Label Printer Setup (Windows)
+
+On Windows, `shippy` prints to a USB label printer that it locates by looking at
+the installed printers' names. A printer is recognized when its Windows name
+**ends with a USB identifier**, separated from the rest of the name by a space,
+hyphen, or underscore. `shippy` then confirms that the matching USB device is
+actually plugged in before printing to it.
+
+Two forms of identifier are accepted:
+
+- **Serial number (preferred).** Example: `Front-Desk PM-2411-BT Q529E65K5250028`.
+  A USB serial number is unique to each physical unit, so two printers of the
+  same model can be given distinct names, and only the one that is actually
+  connected will match. This is the recommended approach when you own more than
+  one printer of the same model.
+- **`VID:PID` pair (legacy).** Example: `PM-2411-BT 2E3C:5760`. Two printers of
+  the same model share a VID:PID, so this form cannot tell them apart — every
+  same-model queue matches whenever any one of them is connected. Use a serial
+  number instead if you have more than one unit.
+
+To find a printer's serial number and VID:PID on Windows, plug it in and run in
+PowerShell:
+
+```powershell
+Get-PnpDevice -PresentOnly |
+  Where-Object { $_.InstanceId -like 'USB*' } |
+  Select-Object FriendlyName, InstanceId | Format-List
+```
+
+The `InstanceId` looks like `USB\VID_2E3C&PID_5760\Q529E65K5250028`, where the
+final segment is the serial number. Rename the printer (Settings → Bluetooth &
+devices → Printers & scanners, or Control Panel → Devices and Printers → Printer
+properties) so that it ends with that serial number.
+
+If more than one matching label printer is connected at the same time, `shippy`
+cannot decide which to use and will raise an error rather than guess. Either
+connect a single printer at a time, or give each a unique serial-based name.
+
 ## Troubleshooting the label printer
 
 If shipping fails with **"No label printer found plugged in"** even though the

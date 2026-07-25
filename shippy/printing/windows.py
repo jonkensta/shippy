@@ -22,6 +22,7 @@ else:
 if HAS_PYWIN32:
 
     _VID_PID_RE = re.compile(r"[\s\-_]([0-9A-Fa-f]{4}):([0-9A-Fa-f]{4})$")
+    _SERIAL_RE = re.compile(r"[\s\-_]([0-9A-Za-z]{6,})$")
 
     # Printer status bits worth surfacing in diagnostics (win32print.PRINTER_STATUS_*).
     _PRINTER_STATUS_BITS = {
@@ -65,16 +66,58 @@ if HAS_PYWIN32:
         )
         return len(entities) > 0
 
+    def _pnp_device_id_pattern(name):
+        """Return a PNPDeviceID LIKE-pattern identifying this printer, or None.
+
+        Prefers a VID:PID suffix (legacy) and falls back to a serial suffix.
+        """
+        vid_pid = _VID_PID_RE.search(name)
+        if vid_pid:
+            vid, pid = vid_pid.group(1).upper(), vid_pid.group(2).upper()
+            return f"%VID_{vid}&PID_{pid}%"
+
+        serial = _SERIAL_RE.search(name)
+        if serial:
+            return f"%{serial.group(1)}%"
+
+        return None
+
+    def _pattern_is_plugged_in(like_pattern):
+        """Check if a USB device matching the PNPDeviceID pattern is connected."""
+        entities = wmi.WMI().query(
+            "SELECT * FROM Win32_PnPEntity "
+            f"WHERE PNPDeviceID LIKE '{like_pattern}'"
+        )
+        return len(entities) > 0
+
     def _get_local_printer_names():
         """Get iterable of local printer names."""
         for printer_info in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL):
             yield printer_info[2]
 
     def get_available_usb_printers():
-        """Get iterable of available USB label printers that are currently plugged in."""
+        """Get iterable of available USB label printers that are currently plugged in.
+
+        A label printer is recognized by a trailing USB identifier in its Windows
+        printer name, separated from the rest of the name by a space, hyphen, or
+        underscore. Two forms are accepted:
+
+          * a USB serial number, e.g. ``Front-Desk PM-2411-BT Q529E65K5250028``.
+            This is preferred: the serial is unique per physical unit, so two
+            printers of the same model can be named distinctly and only the one
+            that is physically connected will match.
+          * a ``VID:PID`` pair, e.g. ``PM-2411-BT 2E3C:5760`` (legacy form). This
+            cannot distinguish two units of the same model, since they share a
+            VID:PID; every same-model queue matches whenever any one is connected.
+
+        The trailing token is only a *candidate* identifier; a printer is yielded
+        only if a USB device whose PNPDeviceID contains that token is actually
+        present, so non-label printers whose names happen to match are filtered
+        out by the connectivity check.
+        """
         for name in _get_local_printer_names():
-            vid_pid = _extract_vid_pid(name)
-            if vid_pid is not None and _is_plugged_in(*vid_pid):
+            like_pattern = _pnp_device_id_pattern(name)
+            if like_pattern is not None and _pattern_is_plugged_in(like_pattern):
                 yield name
 
     def _decode_bits(value, table):
@@ -228,14 +271,21 @@ if HAS_PYWIN32:
     def print_image(img):  # pylint: disable=too-many-locals
         """Print a given image."""
 
-        printer = next(get_available_usb_printers(), None)
-        if printer is None:
+        printers = list(get_available_usb_printers())
+        if not printers:
             hint = ""
             try:
                 hint = f" Diagnostics written to {log_printer_diagnostics()}."
             except Exception:  # pylint: disable=broad-except
                 pass  # Never let diagnostics logging mask the original failure.
             raise RuntimeError("No label printer found plugged in." + hint)
+        if len(printers) > 1:
+            raise RuntimeError(
+                "Multiple label printers are connected and matched "
+                f"({', '.join(printers)}); connect only one at a time, or give "
+                "each printer a unique serial-based name so exactly one matches."
+            )
+        printer = printers[0]
 
         @contextlib.contextmanager
         def create_printer_context(printer_name):
