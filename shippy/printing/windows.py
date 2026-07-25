@@ -24,6 +24,14 @@ if HAS_PYWIN32:
     _VID_PID_RE = re.compile(r"[\s\-_]([0-9A-Fa-f]{4}):([0-9A-Fa-f]{4})$")
     _SERIAL_RE = re.compile(r"[\s\-_]([0-9A-Za-z]{6,})$")
 
+    # Top-level USB device-instance ID, e.g. ``USB\VID_2E3C&PID_5760\Q529...``.
+    # The trailing segment is the per-unit serial (or, lacking one, a port-based
+    # instance path). Interface/child nodes (``...&MI_00\...``) do not match, so
+    # this keys each match to one physical device rather than several PnP nodes.
+    _USB_INSTANCE_RE = re.compile(
+        r"^USB\\VID_([0-9A-Fa-f]{4})&PID_([0-9A-Fa-f]{4})\\([^\\]+)$"
+    )
+
     # Printer status bits worth surfacing in diagnostics (win32print.PRINTER_STATUS_*).
     _PRINTER_STATUS_BITS = {
         0x00000001: "PAUSED",
@@ -66,59 +74,80 @@ if HAS_PYWIN32:
         )
         return len(entities) > 0
 
-    def _pnp_device_id_pattern(name):
-        """Return a PNPDeviceID LIKE-pattern identifying this printer, or None.
-
-        Prefers a VID:PID suffix (legacy) and falls back to a serial suffix.
-        """
-        vid_pid = _VID_PID_RE.search(name)
-        if vid_pid:
-            vid, pid = vid_pid.group(1).upper(), vid_pid.group(2).upper()
-            return f"%VID_{vid}&PID_{pid}%"
-
-        serial = _SERIAL_RE.search(name)
-        if serial:
-            return f"%{serial.group(1)}%"
-
-        return None
-
-    def _pattern_is_plugged_in(like_pattern):
-        """Check if a USB device matching the PNPDeviceID pattern is connected."""
-        entities = wmi.WMI().query(
-            "SELECT * FROM Win32_PnPEntity "
-            f"WHERE PNPDeviceID LIKE '{like_pattern}'"
-        )
-        return len(entities) > 0
-
     def _get_local_printer_names():
         """Get iterable of local printer names."""
         for printer_info in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL):
             yield printer_info[2]
 
-    def get_available_usb_printers():
-        """Get iterable of available USB label printers that are currently plugged in.
+    def get_connected_label_printers():
+        """Return connected label printers as ``(name, is_serial, device_keys)``.
 
-        A label printer is recognized by a trailing USB identifier in its Windows
-        printer name, separated from the rest of the name by a space, hyphen, or
-        underscore. Two forms are accepted:
+        Each installed local printer whose Windows name ends with a USB
+        identifier (see :func:`print_image`) is matched against the currently
+        connected USB devices via WMI. A printer is included only if a matching,
+        working USB device is actually present.
 
-          * a USB serial number, e.g. ``Front-Desk PM-2411-BT Q529E65K5250028``.
-            This is preferred: the serial is unique per physical unit, so two
-            printers of the same model can be named distinctly and only the one
-            that is physically connected will match.
-          * a ``VID:PID`` pair, e.g. ``PM-2411-BT 2E3C:5760`` (legacy form). This
-            cannot distinguish two units of the same model, since they share a
-            VID:PID; every same-model queue matches whenever any one is connected.
-
-        The trailing token is only a *candidate* identifier; a printer is yielded
-        only if a USB device whose PNPDeviceID contains that token is actually
-        present, so non-label printers whose names happen to match are filtered
-        out by the connectivity check.
+        ``device_keys`` is the set of ``(vid, pid, serial)`` identities of the
+        physical devices behind the queue, and ``is_serial`` records whether the
+        match came from a unique serial number (specific to one unit) or a
+        VID:PID pair (generic — shared by every unit of a model).
         """
+
+        connection = wmi.WMI()
+
+        def usb_id_pattern(name):
+            """Return ``(like_pattern, is_serial)`` for a printer name, or None.
+
+            Prefers a VID:PID suffix (legacy, generic) over a serial suffix. The
+            serial pattern is anchored to the end of a USB device-instance ID
+            (``%PID_%<serial>``) so it identifies exactly one physical unit
+            rather than matching the serial as a loose substring of any PnP ID.
+            The trailing name token is only a candidate; the WMI query below is
+            what actually confirms a matching device is connected.
+            """
+            vid_pid = _VID_PID_RE.search(name)
+            if vid_pid:
+                vid, pid = vid_pid.group(1).upper(), vid_pid.group(2).upper()
+                return f"%VID_{vid}&PID_{pid}%", False
+
+            serial = _SERIAL_RE.search(name)
+            if serial:
+                return f"%PID[_]%{serial.group(1)}", True
+
+            return None
+
+        def connected_device_keys(like_pattern):
+            """Physical ``(vid, pid, serial)`` keys of connected devices matching.
+
+            ``ConfigManagerErrorCode = 0`` restricts the result to devices that
+            are present and working, excluding stale/"not connected" ghost nodes.
+            Non device-instance IDs (interface/child nodes) are dropped so a
+            single physical printer counts once, not once per PnP node.
+            """
+            rows = connection.query(
+                "SELECT PNPDeviceID FROM Win32_PnPEntity "
+                f"WHERE PNPDeviceID LIKE '{like_pattern}' "
+                "AND ConfigManagerErrorCode = 0"
+            )
+            keys = set()
+            for row in rows:
+                match = _USB_INSTANCE_RE.match(row.PNPDeviceID or "")
+                if match:
+                    vid, pid, serial = match.groups()
+                    keys.add((vid.upper(), pid.upper(), serial.upper()))
+            return keys
+
+        printers = []
         for name in _get_local_printer_names():
-            like_pattern = _pnp_device_id_pattern(name)
-            if like_pattern is not None and _pattern_is_plugged_in(like_pattern):
-                yield name
+            pattern = usb_id_pattern(name)
+            if pattern is None:
+                continue
+            like_pattern, is_serial = pattern
+            device_keys = connected_device_keys(like_pattern)
+            if device_keys:
+                printers.append((name, is_serial, device_keys))
+
+        return printers
 
     def _decode_bits(value, table):
         """Decode a bitfield into a human-readable list of set flag names."""
@@ -224,7 +253,7 @@ if HAS_PYWIN32:
 
         lines.append("-- Verdict --")
         try:
-            usable = list(get_available_usb_printers())
+            usable = [name for name, _, _ in get_connected_label_printers()]
             if usable:
                 lines.append(f"usable label printers found: {len(usable)}")
                 for name in usable:
@@ -269,9 +298,25 @@ if HAS_PYWIN32:
         return path
 
     def print_image(img):  # pylint: disable=too-many-locals
-        """Print a given image."""
+        """Print a given image.
 
-        printers = list(get_available_usb_printers())
+        A label printer is recognized by a trailing USB identifier in its Windows
+        printer name, separated by a space, hyphen, or underscore:
+
+          * a USB serial number, e.g. ``Front-Desk PM-2411-BT Q529E65K5250028``
+            (preferred: unique per physical unit, so two printers of the same
+            model can be named distinctly and only the connected one matches), or
+          * a ``VID:PID`` pair, e.g. ``PM-2411-BT 2E3C:5760`` (legacy: shared by
+            all units of a model, so it cannot tell two same-model units apart).
+
+        Selection is by *physical device*: queues resolving to the same connected
+        printer collapse to one (a serial-named queue is preferred over a generic
+        VID:PID one), so a stale/duplicate queue does not block printing. Only
+        when two or more distinct printers are connected at once is the choice
+        genuinely ambiguous, and this raises rather than guess.
+        """
+
+        printers = get_connected_label_printers()
         if not printers:
             hint = ""
             try:
@@ -279,13 +324,17 @@ if HAS_PYWIN32:
             except Exception:  # pylint: disable=broad-except
                 pass  # Never let diagnostics logging mask the original failure.
             raise RuntimeError("No label printer found plugged in." + hint)
-        if len(printers) > 1:
+
+        connected_devices = set().union(*(keys for _, _, keys in printers))
+        if len(connected_devices) > 1:
             raise RuntimeError(
-                "Multiple label printers are connected and matched "
-                f"({', '.join(printers)}); connect only one at a time, or give "
-                "each printer a unique serial-based name so exactly one matches."
+                "More than one label printer is currently connected "
+                f"({', '.join(name for name, _, _ in printers)}); shippy cannot "
+                "choose between them — connect only one printer at a time."
             )
-        printer = printers[0]
+
+        serial_named = [name for name, is_serial, _ in printers if is_serial]
+        printer = serial_named[0] if serial_named else printers[0][0]
 
         @contextlib.contextmanager
         def create_printer_context(printer_name):

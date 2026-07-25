@@ -135,11 +135,15 @@ Get-PnpDevice -PresentOnly |
 The `InstanceId` looks like `USB\VID_2E3C&PID_5760\Q529E65K5250028`, where the
 final segment is the serial number. Rename the printer (Settings → Bluetooth &
 devices → Printers & scanners, or Control Panel → Devices and Printers → Printer
-properties) so that it ends with that serial number.
+properties) so that it **ends with** that serial number — the identifier must be
+the last token in the name.
 
-If more than one matching label printer is connected at the same time, `shippy`
-cannot decide which to use and will raise an error rather than guess. Either
-connect a single printer at a time, or give each a unique serial-based name.
+You can safely leave several named queues installed (for example one per unit).
+`shippy` resolves each queue to the physical printer behind it, so a stale or
+duplicate queue for a printer that is not plugged in is simply ignored. Only when
+two or more *different* printers are physically connected at the same time is the
+choice ambiguous; `shippy` then raises rather than guess. Connect a single label
+printer at a time to avoid this.
 
 ## Troubleshooting the label printer
 
