@@ -32,6 +32,13 @@ if HAS_PYWIN32:
         r"^USB\\VID_([0-9A-Fa-f]{4})&PID_([0-9A-Fa-f]{4})\\([^\\]+)$"
     )
 
+    # USB VID/PID prefix of a device-instance ID. Used to scope a serial match to
+    # a real USB device and read its VID/PID. Tolerant of composite/``&REV_``
+    # forms; the exact serial-tail comparison does the actual disambiguation.
+    _USB_VID_PID_PREFIX_RE = re.compile(
+        r"^USB\\VID_([0-9A-Fa-f]{4})&PID_([0-9A-Fa-f]{4})", re.IGNORECASE
+    )
+
     # Printer status bits worth surfacing in diagnostics (win32print.PRINTER_STATUS_*).
     _PRINTER_STATUS_BITS = {
         0x00000001: "PAUSED",
@@ -95,34 +102,37 @@ if HAS_PYWIN32:
 
         connection = wmi.WMI()
 
-        def usb_id_pattern(name):
-            """Return ``(like_pattern, is_serial)`` for a printer name, or None.
+        def usb_query(name):
+            """Return ``(like_pattern, serial)`` for a printer name, or None.
 
-            Prefers a VID:PID suffix (legacy, generic) over a serial suffix. The
-            serial pattern is anchored to the end of a USB device-instance ID
-            (``%PID_%<serial>``) so it identifies exactly one physical unit
-            rather than matching the serial as a loose substring of any PnP ID.
-            The trailing name token is only a candidate; the WMI query below is
-            what actually confirms a matching device is connected.
+            ``serial`` is the exact serial to require on a device-instance tail
+            (serial-named queue), or ``None`` for a legacy VID:PID queue. Prefers
+            a VID:PID suffix (legacy, generic) over a serial suffix. The trailing
+            name token is only a candidate; the WMI query plus the serial-tail
+            equality below are what actually confirm a matching device.
             """
             vid_pid = _VID_PID_RE.search(name)
             if vid_pid:
                 vid, pid = vid_pid.group(1).upper(), vid_pid.group(2).upper()
-                return f"%VID_{vid}&PID_{pid}%", False
+                return f"%VID[_]{vid}&PID[_]{pid}%", None
 
             serial = _SERIAL_RE.search(name)
             if serial:
-                return f"%PID[_]%{serial.group(1)}", True
+                return f"%PID[_]%{serial.group(1)}", serial.group(1)
 
             return None
 
-        def connected_device_keys(like_pattern):
+        def connected_device_keys(like_pattern, serial):
             """Physical ``(vid, pid, serial)`` keys of connected devices matching.
 
             ``ConfigManagerErrorCode = 0`` restricts the result to devices that
             are present and working, excluding stale/"not connected" ghost nodes.
-            Non device-instance IDs (interface/child nodes) are dropped so a
-            single physical printer counts once, not once per PnP node.
+
+            For a serial-named queue (``serial`` given), the LIKE is only a cheap
+            pre-filter: a device is accepted only if its instance tail equals the
+            serial exactly, so a suffix-colliding or unrelated unit cannot bind.
+            For a legacy VID:PID queue, only device-instance nodes are counted
+            (interface/child nodes dropped) so one physical printer counts once.
             """
             rows = connection.query(
                 "SELECT PNPDeviceID FROM Win32_PnPEntity "
@@ -131,21 +141,34 @@ if HAS_PYWIN32:
             )
             keys = set()
             for row in rows:
-                match = _USB_INSTANCE_RE.match(row.PNPDeviceID or "")
-                if match:
-                    vid, pid, serial = match.groups()
-                    keys.add((vid.upper(), pid.upper(), serial.upper()))
+                device_id = row.PNPDeviceID or ""
+                if serial is not None:
+                    prefix = _USB_VID_PID_PREFIX_RE.match(device_id)
+                    tail = device_id.rsplit("\\", 1)[-1]
+                    if prefix and tail.upper() == serial.upper():
+                        keys.add(
+                            (
+                                prefix.group(1).upper(),
+                                prefix.group(2).upper(),
+                                tail.upper(),
+                            )
+                        )
+                else:
+                    match = _USB_INSTANCE_RE.match(device_id)
+                    if match:
+                        vid, pid, tail = match.groups()
+                        keys.add((vid.upper(), pid.upper(), tail.upper()))
             return keys
 
         printers = []
         for name in _get_local_printer_names():
-            pattern = usb_id_pattern(name)
-            if pattern is None:
+            query = usb_query(name)
+            if query is None:
                 continue
-            like_pattern, is_serial = pattern
-            device_keys = connected_device_keys(like_pattern)
+            like_pattern, serial = query
+            device_keys = connected_device_keys(like_pattern, serial)
             if device_keys:
-                printers.append((name, is_serial, device_keys))
+                printers.append((name, serial is not None, device_keys))
 
         return printers
 
