@@ -26,10 +26,13 @@ if HAS_PYWIN32:
 
     # Top-level USB device-instance ID, e.g. ``USB\VID_2E3C&PID_5760\Q529...``.
     # The trailing segment is the per-unit serial (or, lacking one, a port-based
-    # instance path). Interface/child nodes (``...&MI_00\...``) do not match, so
-    # this keys each match to one physical device rather than several PnP nodes.
+    # instance path). An optional ``&REV_xxxx`` in the second segment is allowed,
+    # but interface/child nodes (``...&MI_00\...``) do not match, so this keys each
+    # match to one physical device rather than several PnP nodes.
     _USB_INSTANCE_RE = re.compile(
-        r"^USB\\VID_([0-9A-Fa-f]{4})&PID_([0-9A-Fa-f]{4})\\([^\\]+)$"
+        r"^USB\\VID_([0-9A-Fa-f]{4})&PID_([0-9A-Fa-f]{4})"
+        r"(?:&REV_[0-9A-Fa-f]{4})?\\([^\\]+)$",
+        re.IGNORECASE,
     )
 
     # USB VID/PID prefix of a device-instance ID. Used to scope a serial match to
