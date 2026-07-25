@@ -136,7 +136,8 @@ The `InstanceId` looks like `USB\VID_2E3C&PID_5760\Q529E65K5250028`, where the
 final segment is the serial number. Rename the printer (Settings → Bluetooth &
 devices → Printers & scanners, or Control Panel → Devices and Printers → Printer
 properties) so that it **ends with** that serial number — the identifier must be
-the last token in the name.
+the last token in the name, follow a space, hyphen, or underscore, and be at
+least six letters/digits with no hyphens or underscores of its own.
 
 You can safely leave several named queues installed (for example one per unit).
 `shippy` resolves each queue to the physical printer behind it, so a stale or
