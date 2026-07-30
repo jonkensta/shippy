@@ -212,7 +212,7 @@ if HAS_PYWIN32:
         lines = [
             "-- Local print queues (EnumPrinters LOCAL, level 2) --",
             "   ('eligible' = passes both gates; several queues can be eligible "
-            "at once — the Verdict says which one is actually used)",
+            "at once — the Verdict says which one shippy would print to)",
         ]
         try:
             printers = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL, None, 2)
@@ -224,9 +224,17 @@ if HAS_PYWIN32:
             lines.append("  (no local print queues found)")
             return lines
 
-        # One connection for the whole snapshot, mirroring the selector. Opening
+        # One connection for this whole section, mirroring the selector. Opening
         # one per queue made the report's own COM traffic scale with the printer
-        # count, which can itself tip a struggling WMI service over.
+        # count, which can itself tip a struggling WMI service over. (A full
+        # snapshot still opens three in total — this section, the USB-device
+        # section, and the verdict's resolver — but that is a fixed cost rather
+        # than one growing with the number of installed queues.)
+        #
+        # Note the connection can also die mid-loop, in which case every
+        # remaining queue reports "UNKNOWN (WMI error)" rather than just the
+        # first. That is deliberate: the report keeps going and shows the
+        # failure is systemic, where the selector aborts on the first error.
         try:
             connection = wmi.WMI()
         except Exception as exc:  # pylint: disable=broad-except
