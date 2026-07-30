@@ -510,15 +510,23 @@ if HAS_PYWIN32:
 
             @contextlib.contextmanager
             def create_job(name):
-                """Start the print job."""
+                """Start the print job.
 
+                Each cleanup is guarded by its own acquisition: GDI rejects
+                EndPage without StartPage and EndDoc without StartDoc, so the
+                flat try/finally turned a StartDoc failure ("spooler
+                unavailable") into a misleading "EndPage without StartPage".
+                """
+
+                context.StartDoc(name)
                 try:
-                    context.StartDoc(name)
                     context.StartPage()
-                    yield
+                    try:
+                        yield
 
+                    finally:
+                        context.EndPage()
                 finally:
-                    context.EndPage()
                     context.EndDoc()
 
             if img.size[0] > img.size[1]:
