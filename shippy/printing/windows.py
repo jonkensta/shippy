@@ -476,9 +476,28 @@ if HAS_PYWIN32:
             # Acquire before the try: if CreateDC itself fails there is no
             # device context to release, and running the finally anyway raised
             # UnboundLocalError, replacing the real error with a confusing one.
-            context = win32ui.CreateDC()
             try:
-                context.CreatePrinterDC(printer_name)
+                context = win32ui.CreateDC()
+            except Exception as exc:  # pylint: disable=broad-except
+                raise RuntimeError(
+                    f"Could not create a printer device context ({exc})."
+                    + _diagnostics_hint()
+                ) from exc
+
+            try:
+                # Opening the queue is the failure selection cannot predict: a
+                # matching USB device can be present and working while the queue
+                # itself is paused, offline, or backed by a broken driver. That
+                # is the case the diagnostics log's status bits speak to, so
+                # give the operator the path to it rather than a raw GDI error.
+                try:
+                    context.CreatePrinterDC(printer_name)
+                except Exception as exc:  # pylint: disable=broad-except
+                    raise RuntimeError(
+                        f"Could not open printer queue {printer_name!r} ({exc})."
+                        + _diagnostics_hint()
+                    ) from exc
+
                 yield context
 
             finally:
