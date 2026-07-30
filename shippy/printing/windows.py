@@ -69,20 +69,63 @@ if HAS_PYWIN32:
         0x00000200: "SHARED",
     }
 
-    def _extract_vid_pid(name):
-        """Return (vid, pid) strings from printer name, or None if not a label printer."""
-        match = _VID_PID_RE.search(name)
-        if match:
-            return match.group(1).upper(), match.group(2).upper()
+    def _usb_query(name):
+        """Return ``(like_pattern, serial)`` for a printer name, or None.
+
+        ``serial`` is the exact serial to require on a device-instance tail
+        (serial-named queue), or ``None`` for a legacy VID:PID queue. Prefers a
+        VID:PID suffix (legacy, generic) over a serial suffix. The trailing name
+        token is only a candidate; the WMI query plus the serial-tail equality in
+        :func:`_connected_device_keys` are what actually confirm a matching device.
+        """
+        vid_pid = _VID_PID_RE.search(name)
+        if vid_pid:
+            vid, pid = vid_pid.group(1).upper(), vid_pid.group(2).upper()
+            return f"%VID[_]{vid}&PID[_]{pid}%", None
+
+        serial = _SERIAL_RE.search(name)
+        if serial:
+            return f"%PID[_]%{serial.group(1)}", serial.group(1)
+
         return None
 
-    def _is_plugged_in(vid, pid):
-        """Check if a USB device with given VID:PID is currently connected."""
-        entities = wmi.WMI().query(
-            "SELECT * FROM Win32_PnPEntity "
-            f"WHERE PNPDeviceID LIKE '%VID_{vid}&PID_{pid}%'"
+    def _connected_device_keys(connection, like_pattern, serial):
+        """Physical ``(vid, pid, serial)`` keys of connected devices matching.
+
+        ``ConfigManagerErrorCode = 0`` restricts the result to devices that are
+        present and working, excluding stale/"not connected" ghost nodes.
+
+        For a serial-named queue (``serial`` given), the LIKE is only a cheap
+        pre-filter: a device is accepted only if its instance tail equals the
+        serial exactly, so a suffix-colliding or unrelated unit cannot bind. For
+        a legacy VID:PID queue, only device-instance nodes are counted
+        (interface/child nodes dropped) so one physical printer counts once.
+        """
+        rows = connection.query(
+            "SELECT PNPDeviceID FROM Win32_PnPEntity "
+            f"WHERE PNPDeviceID LIKE '{like_pattern}' "
+            "AND ConfigManagerErrorCode = 0"
         )
-        return len(entities) > 0
+        keys = set()
+        for row in rows:
+            device_id = row.PNPDeviceID or ""
+            if serial is not None:
+                prefix = _USB_VID_PID_PREFIX_RE.match(device_id)
+                tail = device_id.rsplit("\\", 1)[-1]
+                if prefix and tail.upper() == serial.upper():
+                    keys.add(
+                        (
+                            prefix.group(1).upper(),
+                            prefix.group(2).upper(),
+                            tail.upper(),
+                        )
+                    )
+            else:
+                match = _USB_INSTANCE_RE.match(device_id)
+                if match:
+                    vid, pid, tail = match.groups()
+                    keys.add((vid.upper(), pid.upper(), tail.upper()))
+        return keys
 
     def _get_local_printer_names():
         """Get iterable of local printer names."""
@@ -105,71 +148,13 @@ if HAS_PYWIN32:
 
         connection = wmi.WMI()
 
-        def usb_query(name):
-            """Return ``(like_pattern, serial)`` for a printer name, or None.
-
-            ``serial`` is the exact serial to require on a device-instance tail
-            (serial-named queue), or ``None`` for a legacy VID:PID queue. Prefers
-            a VID:PID suffix (legacy, generic) over a serial suffix. The trailing
-            name token is only a candidate; the WMI query plus the serial-tail
-            equality below are what actually confirm a matching device.
-            """
-            vid_pid = _VID_PID_RE.search(name)
-            if vid_pid:
-                vid, pid = vid_pid.group(1).upper(), vid_pid.group(2).upper()
-                return f"%VID[_]{vid}&PID[_]{pid}%", None
-
-            serial = _SERIAL_RE.search(name)
-            if serial:
-                return f"%PID[_]%{serial.group(1)}", serial.group(1)
-
-            return None
-
-        def connected_device_keys(like_pattern, serial):
-            """Physical ``(vid, pid, serial)`` keys of connected devices matching.
-
-            ``ConfigManagerErrorCode = 0`` restricts the result to devices that
-            are present and working, excluding stale/"not connected" ghost nodes.
-
-            For a serial-named queue (``serial`` given), the LIKE is only a cheap
-            pre-filter: a device is accepted only if its instance tail equals the
-            serial exactly, so a suffix-colliding or unrelated unit cannot bind.
-            For a legacy VID:PID queue, only device-instance nodes are counted
-            (interface/child nodes dropped) so one physical printer counts once.
-            """
-            rows = connection.query(
-                "SELECT PNPDeviceID FROM Win32_PnPEntity "
-                f"WHERE PNPDeviceID LIKE '{like_pattern}' "
-                "AND ConfigManagerErrorCode = 0"
-            )
-            keys = set()
-            for row in rows:
-                device_id = row.PNPDeviceID or ""
-                if serial is not None:
-                    prefix = _USB_VID_PID_PREFIX_RE.match(device_id)
-                    tail = device_id.rsplit("\\", 1)[-1]
-                    if prefix and tail.upper() == serial.upper():
-                        keys.add(
-                            (
-                                prefix.group(1).upper(),
-                                prefix.group(2).upper(),
-                                tail.upper(),
-                            )
-                        )
-                else:
-                    match = _USB_INSTANCE_RE.match(device_id)
-                    if match:
-                        vid, pid, tail = match.groups()
-                        keys.add((vid.upper(), pid.upper(), tail.upper()))
-            return keys
-
         printers = []
         for name in _get_local_printer_names():
-            query = usb_query(name)
+            query = _usb_query(name)
             if query is None:
                 continue
             like_pattern, serial = query
-            device_keys = connected_device_keys(like_pattern, serial)
+            device_keys = _connected_device_keys(connection, like_pattern, serial)
             if device_keys:
                 printers.append((name, serial is not None, device_keys))
 
@@ -209,24 +194,29 @@ if HAS_PYWIN32:
                 f"({_decode_bits(attributes, _PRINTER_ATTRIBUTE_BITS)})"
             )
 
-            vid_pid = _extract_vid_pid(name)
-            if vid_pid is None:
+            query = _usb_query(name)
+            if query is None:
                 lines.append(
-                    "        gate 1 (name VID:PID): NO MATCH "
-                    "(name must end in e.g. ' 0922:0028')"
+                    "        gate 1 (name USB identifier): NO MATCH (name must end "
+                    "in a serial, e.g. ' Q529E65K5250028', or ' 0922:0028')"
                 )
                 lines.append("        => would be used: NO")
                 continue
 
-            vid, pid = vid_pid
-            lines.append(f"        gate 1 (name VID:PID): {vid}:{pid}")
+            like_pattern, serial = query
+            kind = f"serial {serial}" if serial is not None else "VID:PID"
+            lines.append(f"        gate 1 (name USB identifier): {kind}")
             try:
-                present = _is_plugged_in(vid, pid)
+                keys = _connected_device_keys(wmi.WMI(), like_pattern, serial)
                 lines.append(
-                    f"        gate 2 (USB present VID_{vid}&PID_{pid}): "
-                    f"{'YES' if present else 'NO'}"
+                    f"        gate 2 (USB present LIKE {like_pattern!r}): "
+                    f"{'YES' if keys else 'NO'}"
                 )
-                lines.append(f"        => would be used: {'YES' if present else 'NO'}")
+                for key in sorted(keys):
+                    lines.append(
+                        f"          device vid={key[0]} pid={key[1]} tail={key[2]}"
+                    )
+                lines.append(f"        => would be used: {'YES' if keys else 'NO'}")
             except Exception as exc:  # pylint: disable=broad-except
                 lines.append(f"        gate 2 (USB present): ERROR {exc!r}")
                 lines.append("        => would be used: UNKNOWN (WMI error)")
@@ -262,8 +252,8 @@ if HAS_PYWIN32:
     def snapshot_printer_state():
         """Build a full, human-readable snapshot of printer/USB state for diagnosis.
 
-        Separates the two detection gates (name VID:PID match, and live USB
-        presence) so a single capture reveals which one is failing.
+        Separates the two detection gates (name USB-identifier match, and live
+        USB presence) so a single capture reveals which one is failing.
         """
         lines = [
             "==================================================================",
