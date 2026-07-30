@@ -167,7 +167,11 @@ if HAS_PYWIN32:
 
     def _snapshot_print_queues():
         """Return report lines describing every local print queue and its gate results."""
-        lines = ["-- Local print queues (EnumPrinters LOCAL, level 2) --"]
+        lines = [
+            "-- Local print queues (EnumPrinters LOCAL, level 2) --",
+            "   ('eligible' = passes both gates; several queues can be eligible "
+            "at once — the Verdict says which one is actually used)",
+        ]
         try:
             printers = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL, None, 2)
         except Exception as exc:  # pylint: disable=broad-except
@@ -200,7 +204,7 @@ if HAS_PYWIN32:
                     "        gate 1 (name USB identifier): NO MATCH (name must end "
                     "in a serial, e.g. ' Q529E65K5250028', or ' 0922:0028')"
                 )
-                lines.append("        => would be used: NO")
+                lines.append("        => eligible: NO")
                 continue
 
             like_pattern, serial = query
@@ -216,10 +220,10 @@ if HAS_PYWIN32:
                     lines.append(
                         f"          device vid={key[0]} pid={key[1]} tail={key[2]}"
                     )
-                lines.append(f"        => would be used: {'YES' if keys else 'NO'}")
+                lines.append(f"        => eligible: {'YES' if keys else 'NO'}")
             except Exception as exc:  # pylint: disable=broad-except
                 lines.append(f"        gate 2 (USB present): ERROR {exc!r}")
-                lines.append("        => would be used: UNKNOWN (WMI error)")
+                lines.append("        => eligible: UNKNOWN (WMI error)")
 
         return lines
 
@@ -269,16 +273,33 @@ if HAS_PYWIN32:
 
         lines.append("-- Verdict --")
         try:
-            usable = [name for name, _, _ in get_connected_label_printers()]
-            if usable:
-                lines.append(f"usable label printers found: {len(usable)}")
-                for name in usable:
-                    lines.append(f"  -> {name}")
+            printers = get_connected_label_printers()
+            if not printers:
+                lines.append("eligible queues: 0")
+                lines.append("  => printing FAILS: 'No label printer found plugged in'")
             else:
-                lines.append("usable label printers found: 0")
-                lines.append("  (this is the condition that raises the RuntimeError)")
+                devices = set().union(*(keys for _, _, keys in printers))
+                lines.append(f"eligible queues: {len(printers)}")
+                for name, is_serial, _ in printers:
+                    kind = "serial-named" if is_serial else "legacy VID:PID"
+                    lines.append(f"  -> {name}  ({kind})")
+                lines.append(f"distinct physical printers connected: {len(devices)}")
+                for vid, pid, tail in sorted(devices):
+                    lines.append(f"  -> {vid}:{pid} serial {tail}")
+                if len(devices) > 1:
+                    # Mirror print_image's guard: several eligible queues are
+                    # fine, several physical printers are not.
+                    lines.append(
+                        "  => printing FAILS: more than one label printer is "
+                        "connected and shippy will not guess between them"
+                    )
+                else:
+                    serial_named = [n for n, is_serial, _ in printers if is_serial]
+                    chosen = serial_named[0] if serial_named else printers[0][0]
+                    lines.append(f"  => printing SUCCEEDS, using {chosen!r}")
         except Exception as exc:  # pylint: disable=broad-except
             lines.append(f"detection raised: {exc!r}")
+            lines.append("  => printing FAILS: the printer query itself errored")
 
         return "\n".join(lines)
 
@@ -313,6 +334,56 @@ if HAS_PYWIN32:
 
         return path
 
+    def _diagnostics_hint():
+        """Best-effort ``" Diagnostics written to ..."`` suffix for an error message."""
+        try:
+            return f" Diagnostics written to {log_printer_diagnostics()}."
+        except Exception:  # pylint: disable=broad-except
+            return ""  # Never let diagnostics logging mask the original failure.
+
+    def _select_printer():
+        """Return the Windows queue name to print to, or raise a clear error.
+
+        Every failure mode is wrapped in a ``RuntimeError`` carrying a
+        diagnostics-log path, so a WMI outage is as diagnosable as the
+        "no printer found" case it would otherwise be mistaken for.
+        """
+        try:
+            printers = get_connected_label_printers()
+        except Exception as exc:  # pylint: disable=broad-except
+            # A WMI/enumeration failure is exactly what the diagnostics log
+            # exists for; route it through the same path rather than surfacing
+            # a raw COM error with no captured state.
+            raise RuntimeError(
+                f"Could not query connected printers ({exc})." + _diagnostics_hint()
+            ) from exc
+
+        if not printers:
+            raise RuntimeError(
+                "No label printer found plugged in." + _diagnostics_hint()
+            )
+
+        connected_devices = set().union(*(keys for _, _, keys in printers))
+        if len(connected_devices) > 1:
+            # The ambiguity is between physical devices, and those need not be
+            # one per queue: a single legacy VID:PID queue can match several
+            # same-model units. Name the devices, not just the queues, or the
+            # message can claim "more than one" while listing a single name.
+            devices = ", ".join(
+                f"{vid}:{pid} serial {tail}"
+                for vid, pid, tail in sorted(connected_devices)
+            )
+            queues = ", ".join(name for name, _, _ in printers)
+            raise RuntimeError(
+                f"More than one label printer is currently connected "
+                f"({len(connected_devices)} devices: {devices}); shippy cannot "
+                f"choose between them — connect only one printer at a time. "
+                f"Matching queues: {queues}."
+            )
+
+        serial_named = [name for name, is_serial, _ in printers if is_serial]
+        return serial_named[0] if serial_named else printers[0][0]
+
     def print_image(img):  # pylint: disable=too-many-locals
         """Print a given image.
 
@@ -332,25 +403,7 @@ if HAS_PYWIN32:
         genuinely ambiguous, and this raises rather than guess.
         """
 
-        printers = get_connected_label_printers()
-        if not printers:
-            hint = ""
-            try:
-                hint = f" Diagnostics written to {log_printer_diagnostics()}."
-            except Exception:  # pylint: disable=broad-except
-                pass  # Never let diagnostics logging mask the original failure.
-            raise RuntimeError("No label printer found plugged in." + hint)
-
-        connected_devices = set().union(*(keys for _, _, keys in printers))
-        if len(connected_devices) > 1:
-            raise RuntimeError(
-                "More than one label printer is currently connected "
-                f"({', '.join(name for name, _, _ in printers)}); shippy cannot "
-                "choose between them — connect only one printer at a time."
-            )
-
-        serial_named = [name for name, is_serial, _ in printers if is_serial]
-        printer = serial_named[0] if serial_named else printers[0][0]
+        printer = _select_printer()
 
         @contextlib.contextmanager
         def create_printer_context(printer_name):
