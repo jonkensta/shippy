@@ -473,8 +473,11 @@ if HAS_PYWIN32:
 
         @contextlib.contextmanager
         def create_printer_context(printer_name):
+            # Acquire before the try: if CreateDC itself fails there is no
+            # device context to release, and running the finally anyway raised
+            # UnboundLocalError, replacing the real error with a confusing one.
+            context = win32ui.CreateDC()
             try:
-                context = win32ui.CreateDC()
                 context.CreatePrinterDC(printer_name)
                 yield context
 
