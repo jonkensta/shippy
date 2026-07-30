@@ -287,10 +287,9 @@ if HAS_PYWIN32:
 
         lines.append("-- Verdict --")
         try:
-            # Ask the same resolver print_image uses, so this cannot drift out
-            # of sync with the real selection.
-            printers = get_connected_label_printers()
-            outcome, detail = _resolve_selection()
+            # One query, via the same resolver print_image uses: the report
+            # cannot describe one enumeration while judging another.
+            outcome, detail, printers = _resolve_selection()
 
             lines.append(f"eligible queues: {len(printers)}")
             for name, is_serial, _ in printers:
@@ -379,7 +378,9 @@ if HAS_PYWIN32:
     def _resolve_selection():
         """Resolve what printing would do, without raising or formatting.
 
-        Returns ``(outcome, detail)``:
+        Returns ``(outcome, detail, printers)``, where ``printers`` is the
+        :func:`get_connected_label_printers` result the decision was made from
+        and ``outcome``/``detail`` are one of:
 
           * ``("ok", queue_name)`` — this queue would be printed to.
           * ``("none", None)`` — no queue passes both gates.
@@ -388,21 +389,24 @@ if HAS_PYWIN32:
 
         Both :func:`_select_printer` (which raises) and the diagnostics verdict
         (which reports) go through this, so a prediction cannot drift out of
-        sync with what printing actually does. Propagates query errors.
+        sync with what printing actually does. ``printers`` is returned rather
+        than re-queried by the caller so that a single report cannot describe
+        one enumeration while judging another. Propagates query errors.
         """
         printers = get_connected_label_printers()
         if not printers:
-            return "none", None
+            return "none", None, printers
 
         devices = set().union(*(keys for _, _, keys in printers))
         if len(devices) > 1:
             # The ambiguity is between physical devices, and those need not be
             # one per queue: a single legacy VID:PID queue can match several
             # same-model units.
-            return "ambiguous", (devices, [name for name, _, _ in printers])
+            return "ambiguous", (devices, [name for name, _, _ in printers]), printers
 
         serial_named = [name for name, is_serial, _ in printers if is_serial]
-        return "ok", (serial_named[0] if serial_named else printers[0][0])
+        chosen = serial_named[0] if serial_named else printers[0][0]
+        return "ok", chosen, printers
 
     def _select_printer():
         """Return the Windows queue name to print to, or raise a clear error.
@@ -411,7 +415,7 @@ if HAS_PYWIN32:
         diagnosable as the "no printer found" case it would be mistaken for.
         """
         try:
-            outcome, detail = _resolve_selection()
+            outcome, detail, _ = _resolve_selection()
         except Exception as exc:  # pylint: disable=broad-except
             # A WMI/enumeration failure is exactly what the diagnostics log
             # exists for; route it through the same path rather than surfacing
