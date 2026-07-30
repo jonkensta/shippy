@@ -165,6 +165,48 @@ if HAS_PYWIN32:
         names = [name for bit, name in table.items() if value & bit]
         return ", ".join(names) if names else "none"
 
+    def _snapshot_one_queue(connection, index, info):
+        """Return report lines for a single print queue and its gate results."""
+        name = info.get("pPrinterName", "")
+        status = info.get("Status", 0)
+        attributes = info.get("Attributes", 0)
+
+        lines = [
+            f"  [{index}] name={name!r}",
+            f"        port={info.get('pPortName', '')!r}",
+            f"        status=0x{status:08x} "
+            f"({_decode_bits(status, _PRINTER_STATUS_BITS)})",
+            f"        attributes=0x{attributes:08x} "
+            f"({_decode_bits(attributes, _PRINTER_ATTRIBUTE_BITS)})",
+        ]
+
+        query = _usb_query(name)
+        if query is None:
+            lines.append(
+                "        gate 1 (name USB identifier): NO MATCH (name must end "
+                "in a serial, e.g. ' Q529E65K5250028', or ' 0922:0028')"
+            )
+            lines.append("        => eligible: NO")
+            return lines
+
+        like_pattern, serial = query
+        kind = f"serial {serial}" if serial is not None else "VID:PID"
+        lines.append(f"        gate 1 (name USB identifier): {kind}")
+        try:
+            keys = _connected_device_keys(connection, like_pattern, serial)
+            lines.append(
+                f"        gate 2 (USB present LIKE {like_pattern!r}): "
+                f"{'YES' if keys else 'NO'}"
+            )
+            for key in sorted(keys):
+                lines.append(f"          device {_describe_device(key)}")
+            lines.append(f"        => eligible: {'YES' if keys else 'NO'}")
+        except Exception as exc:  # pylint: disable=broad-except
+            lines.append(f"        gate 2 (USB present): ERROR {exc!r}")
+            lines.append("        => eligible: UNKNOWN (WMI error)")
+
+        return lines
+
     def _snapshot_print_queues():
         """Return report lines describing every local print queue and its gate results."""
         lines = [
@@ -182,48 +224,17 @@ if HAS_PYWIN32:
             lines.append("  (no local print queues found)")
             return lines
 
+        # One connection for the whole snapshot, mirroring the selector. Opening
+        # one per queue made the report's own COM traffic scale with the printer
+        # count, which can itself tip a struggling WMI service over.
+        try:
+            connection = wmi.WMI()
+        except Exception as exc:  # pylint: disable=broad-except
+            lines.append(f"  ERROR opening WMI connection: {exc!r}")
+            return lines
+
         for index, info in enumerate(printers, start=1):
-            name = info.get("pPrinterName", "")
-            port = info.get("pPortName", "")
-            status = info.get("Status", 0)
-            attributes = info.get("Attributes", 0)
-
-            lines.append(f"  [{index}] name={name!r}")
-            lines.append(f"        port={port!r}")
-            lines.append(
-                f"        status=0x{status:08x} ({_decode_bits(status, _PRINTER_STATUS_BITS)})"
-            )
-            lines.append(
-                f"        attributes=0x{attributes:08x} "
-                f"({_decode_bits(attributes, _PRINTER_ATTRIBUTE_BITS)})"
-            )
-
-            query = _usb_query(name)
-            if query is None:
-                lines.append(
-                    "        gate 1 (name USB identifier): NO MATCH (name must end "
-                    "in a serial, e.g. ' Q529E65K5250028', or ' 0922:0028')"
-                )
-                lines.append("        => eligible: NO")
-                continue
-
-            like_pattern, serial = query
-            kind = f"serial {serial}" if serial is not None else "VID:PID"
-            lines.append(f"        gate 1 (name USB identifier): {kind}")
-            try:
-                keys = _connected_device_keys(wmi.WMI(), like_pattern, serial)
-                lines.append(
-                    f"        gate 2 (USB present LIKE {like_pattern!r}): "
-                    f"{'YES' if keys else 'NO'}"
-                )
-                for key in sorted(keys):
-                    lines.append(
-                        f"          device vid={key[0]} pid={key[1]} tail={key[2]}"
-                    )
-                lines.append(f"        => eligible: {'YES' if keys else 'NO'}")
-            except Exception as exc:  # pylint: disable=broad-except
-                lines.append(f"        gate 2 (USB present): ERROR {exc!r}")
-                lines.append("        => eligible: UNKNOWN (WMI error)")
+            lines += _snapshot_one_queue(connection, index, info)
 
         return lines
 
@@ -256,8 +267,11 @@ if HAS_PYWIN32:
     def snapshot_printer_state():
         """Build a full, human-readable snapshot of printer/USB state for diagnosis.
 
-        Separates the two detection gates (name USB-identifier match, and live
-        USB presence) so a single capture reveals which one is failing.
+        Reports the two per-queue detection gates (name USB-identifier match,
+        and live USB presence) separately, then a verdict. Note that a failure
+        need not have a failing gate: when several distinct printers are
+        connected every gate passes and selection is refused anyway, and a
+        queue that passes both gates can still fail to open.
         """
         lines = [
             "==================================================================",
@@ -273,33 +287,43 @@ if HAS_PYWIN32:
 
         lines.append("-- Verdict --")
         try:
+            # Ask the same resolver print_image uses, so this cannot drift out
+            # of sync with the real selection.
             printers = get_connected_label_printers()
-            if not printers:
-                lines.append("eligible queues: 0")
-                lines.append("  => printing FAILS: 'No label printer found plugged in'")
-            else:
+            outcome, detail = _resolve_selection()
+
+            lines.append(f"eligible queues: {len(printers)}")
+            for name, is_serial, _ in printers:
+                kind = "serial-named" if is_serial else "legacy VID:PID"
+                lines.append(f"  -> {name}  ({kind})")
+            if printers:
                 devices = set().union(*(keys for _, _, keys in printers))
-                lines.append(f"eligible queues: {len(printers)}")
-                for name, is_serial, _ in printers:
-                    kind = "serial-named" if is_serial else "legacy VID:PID"
-                    lines.append(f"  -> {name}  ({kind})")
                 lines.append(f"distinct physical printers connected: {len(devices)}")
-                for vid, pid, tail in sorted(devices):
-                    lines.append(f"  -> {vid}:{pid} serial {tail}")
-                if len(devices) > 1:
-                    # Mirror print_image's guard: several eligible queues are
-                    # fine, several physical printers are not.
-                    lines.append(
-                        "  => printing FAILS: more than one label printer is "
-                        "connected and shippy will not guess between them"
-                    )
-                else:
-                    serial_named = [n for n, is_serial, _ in printers if is_serial]
-                    chosen = serial_named[0] if serial_named else printers[0][0]
-                    lines.append(f"  => printing SUCCEEDS, using {chosen!r}")
+                for key in sorted(devices):
+                    lines.append(f"  -> {_describe_device(key)}")
+
+            if outcome == "none":
+                lines.append(
+                    "  => selection FAILS: 'No label printer found plugged in'"
+                )
+            elif outcome == "ambiguous":
+                lines.append(
+                    "  => selection FAILS: more than one label printer is "
+                    "connected and shippy will not guess between them"
+                )
+            else:
+                lines.append(f"  => shippy would print to {detail!r}")
+                # Selection only proves a matching USB device is present; it
+                # never opens the queue. A paused/offline queue or a broken
+                # driver still fails after this point, so do not promise
+                # success — point at the status bits reported above.
+                lines.append(
+                    "     (queue not opened by this check — if printing still "
+                    "fails, check that queue's status bits above)"
+                )
         except Exception as exc:  # pylint: disable=broad-except
             lines.append(f"detection raised: {exc!r}")
-            lines.append("  => printing FAILS: the printer query itself errored")
+            lines.append("  => selection FAILS: the printer query itself errored")
 
         return "\n".join(lines)
 
@@ -341,15 +365,53 @@ if HAS_PYWIN32:
         except Exception:  # pylint: disable=broad-except
             return ""  # Never let diagnostics logging mask the original failure.
 
+    def _describe_device(key):
+        """Human-readable identity of a ``(vid, pid, tail)`` device key.
+
+        The tail is the unit's USB serial when it has one, but for a serial-less
+        device Windows substitutes a port-based instance path — calling that a
+        "serial" would send the user looking for a sticker that does not exist.
+        """
+        vid, pid, tail = key
+        looks_like_serial = tail.isalnum()
+        return f"{vid}:{pid} {'serial' if looks_like_serial else 'instance'} {tail}"
+
+    def _resolve_selection():
+        """Resolve what printing would do, without raising or formatting.
+
+        Returns ``(outcome, detail)``:
+
+          * ``("ok", queue_name)`` — this queue would be printed to.
+          * ``("none", None)`` — no queue passes both gates.
+          * ``("ambiguous", (devices, queues))`` — several distinct physical
+            printers are connected, so the choice is refused.
+
+        Both :func:`_select_printer` (which raises) and the diagnostics verdict
+        (which reports) go through this, so a prediction cannot drift out of
+        sync with what printing actually does. Propagates query errors.
+        """
+        printers = get_connected_label_printers()
+        if not printers:
+            return "none", None
+
+        devices = set().union(*(keys for _, _, keys in printers))
+        if len(devices) > 1:
+            # The ambiguity is between physical devices, and those need not be
+            # one per queue: a single legacy VID:PID queue can match several
+            # same-model units.
+            return "ambiguous", (devices, [name for name, _, _ in printers])
+
+        serial_named = [name for name, is_serial, _ in printers if is_serial]
+        return "ok", (serial_named[0] if serial_named else printers[0][0])
+
     def _select_printer():
         """Return the Windows queue name to print to, or raise a clear error.
 
-        Every failure mode is wrapped in a ``RuntimeError`` carrying a
-        diagnostics-log path, so a WMI outage is as diagnosable as the
-        "no printer found" case it would otherwise be mistaken for.
+        Every raise here carries a diagnostics-log path, so a WMI outage is as
+        diagnosable as the "no printer found" case it would be mistaken for.
         """
         try:
-            printers = get_connected_label_printers()
+            outcome, detail = _resolve_selection()
         except Exception as exc:  # pylint: disable=broad-except
             # A WMI/enumeration failure is exactly what the diagnostics log
             # exists for; route it through the same path rather than surfacing
@@ -358,31 +420,23 @@ if HAS_PYWIN32:
                 f"Could not query connected printers ({exc})." + _diagnostics_hint()
             ) from exc
 
-        if not printers:
+        if outcome == "none":
             raise RuntimeError(
                 "No label printer found plugged in." + _diagnostics_hint()
             )
 
-        connected_devices = set().union(*(keys for _, _, keys in printers))
-        if len(connected_devices) > 1:
-            # The ambiguity is between physical devices, and those need not be
-            # one per queue: a single legacy VID:PID queue can match several
-            # same-model units. Name the devices, not just the queues, or the
-            # message can claim "more than one" while listing a single name.
-            devices = ", ".join(
-                f"{vid}:{pid} serial {tail}"
-                for vid, pid, tail in sorted(connected_devices)
-            )
-            queues = ", ".join(name for name, _, _ in printers)
+        if outcome == "ambiguous":
+            devices, queues = detail
             raise RuntimeError(
                 f"More than one label printer is currently connected "
-                f"({len(connected_devices)} devices: {devices}); shippy cannot "
-                f"choose between them — connect only one printer at a time. "
-                f"Matching queues: {queues}."
+                f"({len(devices)} devices: "
+                f"{', '.join(_describe_device(d) for d in sorted(devices))}); "
+                f"shippy cannot choose between them — connect only one printer "
+                f"at a time. Matching queues: {', '.join(queues)}."
+                + _diagnostics_hint()
             )
 
-        serial_named = [name for name, is_serial, _ in printers if is_serial]
-        return serial_named[0] if serial_named else printers[0][0]
+        return detail
 
     def print_image(img):  # pylint: disable=too-many-locals
         """Print a given image.
