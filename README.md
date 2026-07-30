@@ -164,8 +164,9 @@ uvx --from git+https://github.com/jonkensta/shippy.git@main shippy diagnose-prin
 
 Run it **while the problem is happening** and send back the output. For every
 label printer it reports the two checks that must both pass — whether the Windows
-queue name carries the expected `VID:PID` suffix, and whether that USB device is
-currently enumerated in Windows — so the report shows exactly which check is
-failing. The same snapshot is also appended automatically to
+queue name ends with a recognized USB identifier (a serial number or a `VID:PID`
+pair), and whether a matching USB device is currently enumerated in Windows — so
+the report shows exactly which check is failing. The same snapshot is also
+appended automatically to
 `%LOCALAPPDATA%\shippy\printer-diagnostics.log` every time the error is raised,
 so that file is worth collecting after an incident as well.
