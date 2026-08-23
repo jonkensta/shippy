@@ -43,21 +43,33 @@ To set up the `shippy` project for development, ensure you have [uv](https://git
 
 The application requires a configuration file for the internal IBP server and the EasyPost API.
 
-1.  Create a `config.ini` file.
-2.  Populate it with your API keys and server URL:
+1.  Create a `config.ini` file (see `sample.ini` for a full example).
+2.  Populate it with your API keys, server URL, and return address:
 
     ```
     [ibp]
     url = http://your_ibp_server_url:8000
-    apikey = your_ibp_api_key_here
 
     [easypost]
     apikey = your_easypost_api_key_here
+
+    [return_address]
+    name = Inside Books Project
+    street1 = PO Box 301029
+    street2 =
+    city = Austin
+    state = Texas
+    zipcode = 78703
     ```
 
-    - `ibp.url`: The URL of your internal IBP server.
-    - `ibp.apikey`: The API key for the IBP server.
+    - `ibp.url`: The base URL of the IBP FastAPI backend. Both the direct
+      form (`http://host:8000`) and the nginx-prefixed form
+      (`https://host/api`) work.
+    - `ibp.unit_address_name`: Optional recipient name for unit (bulk)
+      addresses; defaults to `ATTN: MAILROOM STAFF`.
     - `easypost.apikey`: Your EasyPost API key.
+    - `[return_address]`: The organization return address printed on every
+      shipment.
 
 ## Usage
 
