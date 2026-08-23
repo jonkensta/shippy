@@ -1,6 +1,7 @@
 """Run the application in a CLI."""
 
 import argparse
+import collections
 import configparser
 import contextlib
 import importlib.resources
@@ -18,23 +19,39 @@ from .printing import print_image, snapshot_printer_state
 from .server import Server
 
 
+def build_unit_choices(units: list[dict]) -> dict[str, tuple[str, str]]:
+    """Map uppercased display names to (jurisdiction, name) unit keys.
+
+    Unit names are only unique per jurisdiction, so the jurisdiction is
+    appended to the display name whenever a name is shared across
+    jurisdictions.
+    """
+    name_counts = collections.Counter(unit["name"].upper() for unit in units)
+
+    choices = {}
+    for unit in units:
+        key = unit["name"].upper()
+        if name_counts[key] > 1:
+            key = f"{key} ({unit['jurisdiction'].upper()})"
+        choices[key] = (unit["jurisdiction"], unit["name"])
+
+    return choices
+
+
 def generate_addresses_bulk(config: Config):
     """Generate addresses for bulk shipping."""
     server = Server.from_config(config.ibp)
 
     with console.task_message("Grabbing units list from IBP server"):
-        units = server.unit_ids()
-
-    # Normalize unit names to uppercase.
-    units = {key.upper(): value for key, value in units.items()}
+        units = build_unit_choices(server.units())
 
     while True:
         unit = console.query_unit(units)
         if unit is None:
             continue
 
-        unit_id = units[unit]
-        to_addr = server.unit_address(unit_id)
+        jurisdiction, name = units[unit]
+        to_addr = server.unit_address(jurisdiction, name)
 
         weight = console.query_weight()
         if weight is None:
@@ -52,7 +69,13 @@ def generate_addresses_individual(config: Config):
         if request_id is None:
             continue
 
-        to_addr = server.request_address(request_id)
+        if isinstance(request_id, tuple):
+            # New-style label ID, e.g. "TEX-12345678-0".
+            jurisdiction, inmate_id, _index = request_id
+            to_addr = server.inmate_address(jurisdiction, inmate_id)
+        else:
+            # Legacy label ID: the bare request autoid.
+            to_addr = server.request_address(request_id)
 
         weight = console.query_weight()
         if weight is None:
@@ -148,7 +171,6 @@ def main():
     config = load_config(args.config)
 
     easypost_client = easypost.EasyPostClient(config.easypost.apikey)
-    server = Server.from_config(config.ibp)
 
     logo = load_logo()
 
@@ -157,8 +179,10 @@ def main():
         "\nWelcome! Answer prompts to print postage, hit CTRL+C to cancel and restart\n"
     )
 
-    with console.task_message("Grabbing return address from IBP server"):
-        from_addr = shipping.build_address(easypost_client, **server.return_address())
+    with console.task_message("Building return address from config"):
+        from_addr = shipping.build_address(
+            easypost_client, **config.return_address.model_dump()
+        )
 
     try:
         with console.task_message("Verifying return address"):

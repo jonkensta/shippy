@@ -9,9 +9,10 @@ from prompt_toolkit.completion import ThreadedCompleter
 
 from .addresses import AddressParser
 from .autocompletion import GoogleMapsCompleter
+from .server import JURISDICTIONS
 
 
-def query_unit(units: typing.Dict[str, int]) -> typing.Optional[str]:
+def query_unit(units: typing.Mapping[str, typing.Any]) -> typing.Optional[str]:
     """Query a name of a unit from the user."""
 
     def validate(unit):
@@ -60,7 +61,7 @@ def query_request_id() -> (
 
     def validate(request_id):
         try:
-            _, inmate_id, index = request_id.split("-")
+            jurisdiction, inmate_id, index = request_id.split("-")
         except ValueError:
             try:
                 int(request_id)
@@ -68,6 +69,9 @@ def query_request_id() -> (
                 return "Request ID must be an integer."
 
             return True
+
+        if jurisdiction.strip().upper() not in JURISDICTIONS:
+            return "Jurisdiction must be one of: " + ", ".join(sorted(JURISDICTIONS))
 
         try:
             int(inmate_id), int(index)
