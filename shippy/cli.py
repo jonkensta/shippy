@@ -22,6 +22,7 @@ from ibp_printing import (
     save_for_retry,
 )
 from ibp_printing.diagnostics import build_report
+from ibp_printing.log import get_logger
 from PIL import Image
 
 from . import console, shipping
@@ -34,6 +35,10 @@ PRINT_TRACK_TIMEOUT_S = 30.0
 
 # Name passed to ibp-printing so shippy gets its own printer log files.
 LOG_APP_NAME = "shippy"
+# diagnose-printer may run next to a shipping session; give it its own files.
+DIAG_LOG_APP_NAME = "diag"
+
+logger = get_logger("shippy")
 
 # Outcomes whose raw value reads badly after "the printer queue reported".
 OUTCOME_DETAILS = {
@@ -103,7 +108,7 @@ def generate_addresses_manual(config: Config):
 
 def run_diagnose_printer(_args):
     """Print a snapshot of printer/USB state to help debug detection failures."""
-    log_dir = configure_logging(app=LOG_APP_NAME, console=False)
+    log_dir = configure_logging(app=DIAG_LOG_APP_NAME, console=False)
     print(
         build_report(discover(), get_backend().recent_print_events(), log_dir=log_dir)
     )
@@ -121,7 +126,12 @@ def preview_image(img: Image.Image) -> None:
         input("(preview) press Enter to continue ... ")
 
 
-def warn_if_job_not_ok(result: PrintResult, log_dir: pathlib.Path) -> None:
+def shipment_ref(shipment) -> str:
+    """What a volunteer searches for in EasyPost: tracking code, else shipment id."""
+    return shipment.tracking_code or shipment.id
+
+
+def warn_if_job_not_ok(shipment, result: PrintResult, log_dir: pathlib.Path) -> None:
     """Tell the volunteer when the spooler could not confirm the label printed."""
     if result.outcome.ok:
         return
@@ -131,8 +141,30 @@ def warn_if_job_not_ok(result: PrintResult, log_dir: pathlib.Path) -> None:
         f"  Warning: the label was sent to {result.printer_name!r}, but {detail}. "
         "It may NOT have printed.\n"
         "  Check the printer before reprinting. Postage was already bought and was "
-        f"NOT refunded; if no label came out, reprint or refund '{result.job_name}' "
-        "from EasyPost.\n"
+        "NOT refunded; if no label came out, reprint or refund "
+        f"'{shipment_ref(shipment)}' from EasyPost.\n"
+        f"  Printer logs: {log_dir}",
+        style="fg:yellow",
+    )
+
+
+def warn_print_raised(shipment, exc: Exception, log_dir: pathlib.Path) -> None:
+    """Tell the volunteer an unexpected print error left the label's fate unknown.
+
+    Anything other than PrintError may have happened after the job reached the
+    spooler, so the label is neither refunded nor saved for another try.
+    """
+    logger.error(
+        "unexpected error while printing %s; outcome unknown, not refunded",
+        shipment.id,
+        exc_info=exc,
+    )
+    questionary.print(
+        f"  Warning: printing failed unexpectedly ({exc}), after the label may "
+        "already have reached the printer. It may or may NOT have printed.\n"
+        "  Check the printer before reprinting. Postage was NOT refunded; if no "
+        f"label came out, reprint or refund '{shipment_ref(shipment)}' from "
+        "EasyPost.\n"
         f"  Printer logs: {log_dir}",
         style="fg:yellow",
     )
@@ -178,17 +210,16 @@ def print_label(shipment, image: Image.Image, log_dir: pathlib.Path) -> PrintRes
 
 
 def save_unprinted_label(
-    shipment, image: Image.Image, error: PrintError, log_dir: pathlib.Path
+    shipment, image: Image.Image, error: PrintError
 ) -> pathlib.Path:
-    """Queue a label no printer took and tell the volunteer postage was kept.
+    """Queue a label no printer took for the label watcher.
 
     Raises:
         Exception: whatever saving raised; the caller then refunds.
     """
-    name = shipment.tracking_code or shipment.id
     try:
         with console.task_message("Saving label to print later"):
-            path = save_for_retry(image, name=name)
+            return save_for_retry(image, name=shipment_ref(shipment))
     except Exception as exc:
         questionary.print(
             f"  The label did NOT print ({error}) and could not be saved to print "
@@ -196,17 +227,26 @@ def save_unprinted_label(
             style="fg:red",
         )
         raise
+
+
+def report_saved_label(
+    shipment, path: pathlib.Path, error: PrintError, log_dir: pathlib.Path
+) -> None:
+    """Tell the volunteer the label was saved and postage was kept."""
     questionary.print(
         f"  The label did NOT print: {error}\n"
         f"  It was saved to: {path}\n"
         "  If the IBP label watcher is running, it will print automatically as "
-        "soon as a label printer is working. Otherwise, print that file yourself.\n"
-        "  Postage was NOT refunded. If this package will not ship, refund "
-        f"'{name}' in EasyPost.\n"
+        "soon as a label printer is working.\n"
+        "  Postage was NOT refunded.\n"
+        "  Before you print that file by hand, or refund "
+        f"'{shipment_ref(shipment)}' in EasyPost, DELETE it from {path.parent} "
+        "first, so the label watcher does not print it too. If it is already "
+        "gone, the watcher has picked it up: check the printer (and the printed "
+        "and check-printer folders next to it) before doing either.\n"
         f"  Printer logs: {log_dir}",
         style="fg:yellow",
     )
-    return path
 
 
 def load_logo() -> Image.Image:
@@ -324,22 +364,47 @@ def main():
                 easypost_client, from_addr, to_addr, weight, config.parcel
             )
 
-        # No label image yet (download/logo failed): nothing can print, refund.
+        ship_label(easypost_client, shipment, logo, args.preview, log_dir)
+
+
+def ship_label(
+    easypost_client,
+    shipment,
+    logo: Image.Image | None,
+    preview: bool,
+    log_dir: pathlib.Path,
+) -> None:
+    """Turn a bought shipment into a printed (or saved) label.
+
+    Refunds happen only where no label can have reached a printer: while
+    preparing the image, and when a label that definitely did not print could
+    not be saved for the label watcher. Everything after a print call was
+    made (other than a definite PrintError) or after the label was saved sits
+    outside any refund context.
+    """
+    # No label image yet (download/logo failed): nothing can print, refund.
+    with request_refund_on_error(easypost_client, shipment):
+        image = prepare_label(shipment, logo)
+        if preview:
+            preview_image(image)
+            return
+
+    try:
+        result = print_label(shipment, image, log_dir)
+    except PrintError as error:
+        # The label definitely reached no printer. Keep the postage and queue
+        # the label for the label watcher; refund only if the label cannot even
+        # be saved (save_unprinted_label re-raises).
         with request_refund_on_error(easypost_client, shipment):
-            image = prepare_label(shipment, logo)
-            if args.preview:
-                preview_image(image)
-                continue
+            path = save_unprinted_label(shipment, image, error)
+        report_saved_label(shipment, path, error, log_dir)
+        return
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        # Not a PrintError: we can't tell whether the job reached the spooler,
+        # so treat it as uncertain (no refund, no automatic retry).
+        warn_print_raised(shipment, exc, log_dir)
+        return
 
-            try:
-                result = print_label(shipment, image, log_dir)
-            except PrintError as error:
-                # The label definitely reached no printer. Keep the postage and
-                # queue the label for the label watcher; refund only if the
-                # label cannot even be saved (save_unprinted_label re-raises).
-                save_unprinted_label(shipment, image, error, log_dir)
-                continue
-
-        # Outside the refund context: the job was spooled, so the label may well
-        # have printed. Refunding here could leave a printed label with no postage.
-        warn_if_job_not_ok(result, log_dir)
+    # The job was spooled, so the label may well have printed. Refunding here
+    # could leave a printed label with no postage.
+    warn_if_job_not_ok(shipment, result, log_dir)

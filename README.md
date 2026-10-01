@@ -130,16 +130,21 @@ What shippy does once postage has been bought:
   The label, with the IBP logo, is saved to the print queue folder
   `Downloads\to-print\` and shippy prints the exact path. If the IBP label
   watcher (from ibp-printing) is running, it prints the label automatically as
-  soon as a label printer is working; otherwise print that file yourself. If
-  the package will not ship after all, refund the shipment in EasyPost (shippy
-  shows its tracking code) and delete the saved file. shippy then carries on
-  with the next package. Only if the label cannot even be saved is the postage
-  refunded (shippy says so).
+  soon as a label printer is working. **Before** you print that file by hand,
+  or refund the shipment in EasyPost (shippy shows its tracking code) because
+  the package will not ship, delete the file from `to-print\` first, so the
+  watcher does not print it too. If the file is already gone, the watcher has
+  picked it up: check the printer (and the `printed\` and `check-printer\`
+  folders) first. shippy then carries on with the next package. Only if the
+  label cannot even be saved is the postage refunded (shippy says so).
 - **The label was sent to a printer but the queue reported a problem**, or it
   could not be confirmed that the job reached the printer: the postage is
   **not** refunded and the label is **not** queued again, because it may well
-  still print. shippy warns you; check the printer before reprinting so you do
-  not end up with two labels.
+  still print. shippy warns you with the shipment's tracking code; check the
+  printer before reprinting so you do not end up with two labels.
+- **Printing failed with an unexpected error** (anything other than "no
+  printer could take it"): shippy cannot tell whether the job reached the
+  printer, so it treats it the same way: warning, no refund, nothing queued.
 
 ### Development: `--preview`
 
@@ -163,7 +168,7 @@ Every discovery pass and print attempt is logged verbosely to
 
 shippy writes `printer-shippy.log` (human-readable) and `printer-shippy.jsonl`
 (one JSON object per line); other IBP apps write their own `printer-<app>` files
-in the same folder.
+in the same folder (`shippy diagnose-printer` writes `printer-diag.*`).
 Collect both after any printing incident.
 
 ## Troubleshooting the label printer
