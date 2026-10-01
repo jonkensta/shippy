@@ -32,11 +32,9 @@ addresses = "shippy.addresses:demo"
 package = true
 
 [tool.uv.sources]
-# TODO: once ibp-printing is published, switch to
-#   ibp-printing = { git = "https://github.com/jonkensta/ibp-printing", tag = "v0.1.0" }
-# The sibling path only resolves on machines with both repos checked out side by side
-# (it will not resolve in GitHub Actions).
-ibp-printing = { path = "../ibp-printing", editable = true }
+# For local development against a checkout next to this repo, temporarily use:
+#   ibp-printing = { path = "../ibp-printing", editable = true }
+ibp-printing = { git = "https://github.com/jonkensta/ibp-printing", tag = "v0.1.0" }
 
 [tool.setuptools]
 packages = ["shippy", "shippy.assets"]
