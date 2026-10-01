@@ -217,9 +217,11 @@ def save_unprinted_label(
     Raises:
         Exception: whatever saving raised; the caller then refunds.
     """
+    # No console.task_message here: its closing "done!" would run inside the
+    # caller's refund context, so a console failure after a successful save
+    # would refund a label that is already queued to print.
     try:
-        with console.task_message("Saving label to print later"):
-            return save_for_retry(image, name=shipment_ref(shipment))
+        return save_for_retry(image, name=shipment_ref(shipment))
     except Exception as exc:
         questionary.print(
             f"  The label did NOT print ({error}) and could not be saved to print "
