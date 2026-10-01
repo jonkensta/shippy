@@ -111,7 +111,8 @@ print queue is only used when **both** of these hold:
 
 1. The queue name ends in the printer's USB `VID:PID`, separated from the rest of
    the name by a space, tab, `_` or `-` — e.g. `DYMO LabelWriter 450 0922:0028`.
-   Local and connected queues are both considered.
+   Only local print queues are considered (USB label printers are local; network
+   printer connections are skipped so a dead print server cannot stall printing).
 2. A USB device with that `VID:PID` is currently plugged in.
 
 If several queues qualify, healthy, problem-free and default queues are tried
