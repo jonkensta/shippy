@@ -16,7 +16,7 @@ Inside Books Project is an Austin-based community service volunteer organization
 - **EasyPost API Integration**: Utilizes the EasyPost API for purchasing postage and generating shipping labels.
 - **Multiple Shipping Modes**: Supports bulk, individual, and manual address input for shipping.
 - **Label Printing**: Generates and prints postage labels, with an option to include a custom logo.
-- **Error Handling**: Includes mechanisms to catch and display errors during the shipping process.
+- **Error Handling**: Includes mechanisms to catch and display errors during the shipping process. A label that cannot reach any printer is saved to a print queue folder instead of being thrown away (see [When a label does not print](#when-a-label-does-not-print)).
 
 ## Installation and Development
 
@@ -116,9 +116,31 @@ print queue is only used when **both** of these hold:
 
 If several queues qualify, healthy, problem-free and default queues are tried
 first; if one fails before the job is spooled, the next one is tried. After
-spooling, shippy follows the job for up to 30 seconds and warns if the spooler
-reports an error or never finishes it (the label may not have printed; postage is
-not refunded automatically in that case because it may well have printed).
+spooling, shippy follows the job for up to 30 seconds.
+
+### When a label does not print
+
+What shippy does once postage has been bought:
+
+- **The label could not be downloaded or prepared** (no label image exists):
+  the postage is refunded automatically.
+- **No printer could take the label** (no label printer plugged in, or every
+  printer failed before the job was sent): the postage is **not** refunded.
+  The label, with the IBP logo, is saved to the print queue folder
+  `Downloads\to-print\` and shippy prints the exact path. If the IBP label
+  watcher (from ibp-printing) is running, it prints the label automatically as
+  soon as a label printer is working; otherwise print that file yourself. If
+  the package will not ship after all, refund the shipment in EasyPost (shippy
+  shows its tracking code) and delete the saved file. shippy then carries on
+  with the next package. Only if the label cannot even be saved is the postage
+  refunded (shippy says so).
+- **The label was sent to a printer but the queue reported a problem**, or it
+  could not be confirmed that the job reached the printer: the postage is
+  **not** refunded and the label is **not** queued again, because it may well
+  still print. shippy warns you; check the printer before reprinting so you do
+  not end up with two labels.
+
+### Development: `--preview`
 
 On Linux, every CUPS queue is usable. For development without printing a label,
 pass `--preview` to open each label in an image viewer instead:
@@ -127,6 +149,10 @@ pass `--preview` to open each label in an image viewer instead:
 shippy --preview --config config.ini manual
 ```
 
+**`--preview` still buys real postage.** It only skips the printer. For
+development, put an EasyPost **test** API key (from the EasyPost dashboard) in
+your config so no real postage is purchased.
+
 ### Logs
 
 Every discovery pass and print attempt is logged verbosely to
@@ -134,7 +160,9 @@ Every discovery pass and print attempt is logged verbosely to
 - Windows: `%LOCALAPPDATA%\ibp-printing\logs`
 - Linux: `~/.local/state/ibp-printing/logs` (or `$XDG_STATE_HOME/ibp-printing/logs`)
 
-`printer.log` is human-readable and `printer.jsonl` has one JSON object per line.
+shippy writes `printer-shippy.log` (human-readable) and `printer-shippy.jsonl`
+(one JSON object per line); other IBP apps write their own `printer-<app>` files
+in the same folder.
 Collect both after any printing incident.
 
 ## Troubleshooting the label printer

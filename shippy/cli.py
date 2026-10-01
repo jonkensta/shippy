@@ -13,11 +13,13 @@ import easypost  # type: ignore
 import googlemaps  # type: ignore
 import questionary
 from ibp_printing import (
+    PrintError,
     PrintResult,
     configure_logging,
     discover,
     get_backend,
     print_to_first_available,
+    save_for_retry,
 )
 from ibp_printing.diagnostics import build_report
 from PIL import Image
@@ -29,6 +31,15 @@ from .server import Server
 
 # How long to follow a spooled label job before giving up on knowing its outcome.
 PRINT_TRACK_TIMEOUT_S = 30.0
+
+# Name passed to ibp-printing so shippy gets its own printer log files.
+LOG_APP_NAME = "shippy"
+
+# Outcomes whose raw value reads badly after "the printer queue reported".
+OUTCOME_DETAILS = {
+    "uncertain": "it could not be confirmed that the job reached the printer",
+    "tracking_failed": "following the print job failed",
+}
 
 
 def generate_addresses_bulk(config: Config):
@@ -92,7 +103,7 @@ def generate_addresses_manual(config: Config):
 
 def run_diagnose_printer(_args):
     """Print a snapshot of printer/USB state to help debug detection failures."""
-    log_dir = configure_logging(console=False)
+    log_dir = configure_logging(app=LOG_APP_NAME, console=False)
     print(
         build_report(discover(), get_backend().recent_print_events(), log_dir=log_dir)
     )
@@ -114,45 +125,88 @@ def warn_if_job_not_ok(result: PrintResult, log_dir: pathlib.Path) -> None:
     """Tell the volunteer when the spooler could not confirm the label printed."""
     if result.outcome.ok:
         return
+    outcome = result.outcome.value
+    detail = OUTCOME_DETAILS.get(outcome, f"the printer queue reported '{outcome}'")
     questionary.print(
-        f"  Warning: the label was sent to {result.printer_name!r}, but the printer "
-        f"queue reported '{result.outcome.value}'. It may NOT have printed.\n"
-        "  Check the printer. Postage was already bought and was NOT refunded; if no "
-        f"label came out, reprint or refund '{result.job_name}' from EasyPost.\n"
+        f"  Warning: the label was sent to {result.printer_name!r}, but {detail}. "
+        "It may NOT have printed.\n"
+        "  Check the printer before reprinting. Postage was already bought and was "
+        f"NOT refunded; if no label came out, reprint or refund '{result.job_name}' "
+        "from EasyPost.\n"
         f"  Printer logs: {log_dir}",
         style="fg:yellow",
     )
 
 
-def print_postage(
-    shipment, logo: Image.Image | None, log_dir: pathlib.Path, *, preview: bool
-) -> PrintResult | None:
-    """Download the label, stamp the logo and print it (or preview it).
+@contextlib.contextmanager
+def request_refund_on_error(easypost_client, shipment):
+    """Manage a shipment context where a refund is requested on error."""
+    try:
+        yield shipment
+    except Exception:
+        with console.task_message("Requesting refund"):
+            easypost_client.shipment.refund(shipment.id)
+        raise
+
+
+def prepare_label(shipment, logo: Image.Image | None) -> Image.Image:
+    """Download the bought label and stamp the logo on it."""
+    with console.task_message("Downloading label"):
+        image = grab_png_from_url(shipment.postage_label.label_url)
+        if logo is not None:
+            image.paste(logo, (450, 425))
+    return image
+
+
+def print_label(shipment, image: Image.Image, log_dir: pathlib.Path) -> PrintResult:
+    """Print the label on the best usable label printer.
 
     Raises:
-        RuntimeError: (incl. ibp_printing.PrintError) if the label could not be
-            sent to any printer; the caller refunds the postage.
+        ibp_printing.PrintError: if the label definitely reached no printer.
     """
     try:
         with console.task_message("Printing postage"):
-            image = grab_png_from_url(shipment.postage_label.label_url)
-
-            if logo is not None:
-                image.paste(logo, (450, 425))
-
-            if preview:
-                preview_image(image)
-                return None
-
             return print_to_first_available(
                 image,
                 job_name=f"Shipping Label {shipment.id}",
                 track_timeout_s=PRINT_TRACK_TIMEOUT_S,
             )
-    except RuntimeError as exc:
+    except Exception as exc:
         questionary.print(f"  Error: {exc}", style="fg:red")
         questionary.print(f"  Printer logs: {log_dir}", style="fg:red")
         raise
+
+
+def save_unprinted_label(
+    shipment, image: Image.Image, error: PrintError, log_dir: pathlib.Path
+) -> pathlib.Path:
+    """Queue a label no printer took and tell the volunteer postage was kept.
+
+    Raises:
+        Exception: whatever saving raised; the caller then refunds.
+    """
+    name = shipment.tracking_code or shipment.id
+    try:
+        with console.task_message("Saving label to print later"):
+            path = save_for_retry(image, name=name)
+    except Exception as exc:
+        questionary.print(
+            f"  The label did NOT print ({error}) and could not be saved to print "
+            f"later ({exc}). Refunding the postage.",
+            style="fg:red",
+        )
+        raise
+    questionary.print(
+        f"  The label did NOT print: {error}\n"
+        f"  It was saved to: {path}\n"
+        "  If the IBP label watcher is running, it will print automatically as "
+        "soon as a label printer is working. Otherwise, print that file yourself.\n"
+        "  Postage was NOT refunded. If this package will not ship, refund "
+        f"'{name}' in EasyPost.\n"
+        f"  Printer logs: {log_dir}",
+        style="fg:yellow",
+    )
+    return path
 
 
 def load_logo() -> Image.Image:
@@ -182,7 +236,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--preview",
         action="store_true",
-        help="open labels in an image viewer instead of printing them (development)",
+        help=(
+            "open labels in an image viewer instead of printing them (development; "
+            "still buys real postage, so use an EasyPost test API key)"
+        ),
     )
 
     subparsers = parser.add_subparsers(
@@ -224,7 +281,7 @@ def main():
         parser.error("--config is required for shipping commands")
 
     config = load_config(args.config)
-    log_dir = configure_logging(console=False)
+    log_dir = configure_logging(app=LOG_APP_NAME, console=False)
 
     easypost_client = easypost.EasyPostClient(config.easypost.apikey)
     server = Server.from_config(config.ibp)
@@ -267,20 +324,22 @@ def main():
                 easypost_client, from_addr, to_addr, weight, config.parcel
             )
 
-        @contextlib.contextmanager
-        def request_refund_on_error(shipment):
-            """Manage a shipment context where a refund is requested on error."""
-            try:
-                yield shipment
-            except Exception:
-                with console.task_message("Requesting refund"):
-                    easypost_client.shipment.refund(shipment.id)
-                raise
+        # No label image yet (download/logo failed): nothing can print, refund.
+        with request_refund_on_error(easypost_client, shipment):
+            image = prepare_label(shipment, logo)
+            if args.preview:
+                preview_image(image)
+                continue
 
-        with request_refund_on_error(shipment):
-            result = print_postage(shipment, logo, log_dir, preview=args.preview)
+            try:
+                result = print_label(shipment, image, log_dir)
+            except PrintError as error:
+                # The label definitely reached no printer. Keep the postage and
+                # queue the label for the label watcher; refund only if the
+                # label cannot even be saved (save_unprinted_label re-raises).
+                save_unprinted_label(shipment, image, error, log_dir)
+                continue
 
         # Outside the refund context: the job was spooled, so the label may well
         # have printed. Refunding here could leave a printed label with no postage.
-        if result is not None:
-            warn_if_job_not_ok(result, log_dir)
+        warn_if_job_not_ok(result, log_dir)
