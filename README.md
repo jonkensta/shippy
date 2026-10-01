@@ -103,6 +103,40 @@ To wrap the above in a powershell command, you can do the following:
 powershell.exe -NoExit -Command "& { & 'uvx' --from 'git+https://github.com/jonkensta/shippy.git@main' 'shippy' --config 'C:\path\to\your\config.ini' 'bulk' }"
 ```
 
+## Label printers
+
+Printing is handled by the shared
+[`ibp-printing`](https://github.com/jonkensta/ibp-printing) library. On Windows a
+print queue is only used when **both** of these hold:
+
+1. The queue name ends in the printer's USB `VID:PID`, separated from the rest of
+   the name by a space, tab, `_` or `-` — e.g. `DYMO LabelWriter 450 0922:0028`.
+   Local and connected queues are both considered.
+2. A USB device with that `VID:PID` is currently plugged in.
+
+If several queues qualify, healthy, problem-free and default queues are tried
+first; if one fails before the job is spooled, the next one is tried. After
+spooling, shippy follows the job for up to 30 seconds and warns if the spooler
+reports an error or never finishes it (the label may not have printed; postage is
+not refunded automatically in that case because it may well have printed).
+
+On Linux, every CUPS queue is usable. For development without printing a label,
+pass `--preview` to open each label in an image viewer instead:
+
+```
+shippy --preview --config config.ini manual
+```
+
+### Logs
+
+Every discovery pass and print attempt is logged verbosely to
+
+- Windows: `%LOCALAPPDATA%\ibp-printing\logs`
+- Linux: `~/.local/state/ibp-printing/logs` (or `$XDG_STATE_HOME/ibp-printing/logs`)
+
+`printer.log` is human-readable and `printer.jsonl` has one JSON object per line.
+Collect both after any printing incident.
+
 ## Troubleshooting the label printer
 
 If shipping fails with **"No label printer found plugged in"** even though the
@@ -119,10 +153,8 @@ Or via `uvx`:
 uvx --from git+https://github.com/jonkensta/shippy.git@main shippy diagnose-printer
 ```
 
-Run it **while the problem is happening** and send back the output. For every
-label printer it reports the two checks that must both pass — whether the Windows
-queue name carries the expected `VID:PID` suffix, and whether that USB device is
-currently enumerated in Windows — so the report shows exactly which check is
-failing. The same snapshot is also appended automatically to
-`%LOCALAPPDATA%\shippy\printer-diagnostics.log` every time the error is raised,
-so that file is worth collecting after an incident as well.
+Run it **while the problem is happening** and send back the output together with
+the log files above. For every print queue it reports each detection check (name
+`VID:PID` suffix, USB device present and healthy, queue status) and whether the
+queue would be used, followed by the USB devices Windows sees and recent
+PrintService events.

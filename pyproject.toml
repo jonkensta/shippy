@@ -9,11 +9,10 @@ dependencies = [
     "pillow>=12.2.0",
     "questionary>=2.1.0",
     "requests>=2.33.0",
-    "pywin32>=310; sys_platform == 'win32'",
-    "WMI>=1.5.1; sys_platform == 'win32'",
     "googlemaps>=4.10.0",
     "prompt-toolkit>=3.0.51",
     "pydantic>=2.11.7",
+    "ibp-printing",
 ]
 
 [dependency-groups]
@@ -21,7 +20,6 @@ dev = [
     "black>=26.3.1",
     "mypy>=1.16.1",
     "pylint>=3.3.7",
-    "types-pywin32>=310.0.0.20250516",
     "types-requests>=2.32.4.20250611",
 ]
 
@@ -33,8 +31,15 @@ addresses = "shippy.addresses:demo"
 [tool.uv]
 package = true
 
+[tool.uv.sources]
+# TODO: once ibp-printing is published, switch to
+#   ibp-printing = { git = "https://github.com/jonkensta/ibp-printing", tag = "v0.1.0" }
+# The sibling path only resolves on machines with both repos checked out side by side
+# (it will not resolve in GitHub Actions).
+ibp-printing = { path = "../ibp-printing", editable = true }
+
 [tool.setuptools]
-packages = ["shippy", "shippy.assets", "shippy.printing"]
+packages = ["shippy", "shippy.assets"]
 
 [tool.setuptools.package-data]
 "shippy.assets" = ["*.jpg"]

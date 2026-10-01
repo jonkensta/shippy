@@ -4,18 +4,31 @@ import argparse
 import configparser
 import contextlib
 import importlib.resources
+import os
 import pathlib
+import subprocess
+import sys
 
 import easypost  # type: ignore
 import googlemaps  # type: ignore
 import questionary
+from ibp_printing import (
+    PrintResult,
+    configure_logging,
+    discover,
+    get_backend,
+    print_to_first_available,
+)
+from ibp_printing.diagnostics import build_report
 from PIL import Image
 
 from . import console, shipping
-from .misc import grab_png_from_url
+from .misc import build_tempfile, grab_png_from_url
 from .models import Config
-from .printing import print_image, snapshot_printer_state
 from .server import Server
+
+# How long to follow a spooled label job before giving up on knowing its outcome.
+PRINT_TRACK_TIMEOUT_S = 30.0
 
 
 def generate_addresses_bulk(config: Config):
@@ -79,7 +92,67 @@ def generate_addresses_manual(config: Config):
 
 def run_diagnose_printer(_args):
     """Print a snapshot of printer/USB state to help debug detection failures."""
-    print(snapshot_printer_state())
+    log_dir = configure_logging(console=False)
+    print(
+        build_report(discover(), get_backend().recent_print_events(), log_dir=log_dir)
+    )
+
+
+def preview_image(img: Image.Image) -> None:
+    """Open an image in the system viewer instead of printing it (dev use)."""
+    with build_tempfile(suffix=".png") as tmpfile:
+        img.save(tmpfile.name)
+        if sys.platform == "win32":
+            os.startfile(tmpfile.name)  # pylint: disable=no-member
+        else:
+            subprocess.check_call(["xdg-open", tmpfile.name])
+        # Keep the temp file alive until the viewer has had a chance to open it.
+        input("(preview) press Enter to continue ... ")
+
+
+def warn_if_job_not_ok(result: PrintResult, log_dir: pathlib.Path) -> None:
+    """Tell the volunteer when the spooler could not confirm the label printed."""
+    if result.outcome.ok:
+        return
+    questionary.print(
+        f"  Warning: the label was sent to {result.printer_name!r}, but the printer "
+        f"queue reported '{result.outcome.value}'. It may NOT have printed.\n"
+        "  Check the printer. Postage was already bought and was NOT refunded; if no "
+        f"label came out, reprint or refund '{result.job_name}' from EasyPost.\n"
+        f"  Printer logs: {log_dir}",
+        style="fg:yellow",
+    )
+
+
+def print_postage(
+    shipment, logo: Image.Image | None, log_dir: pathlib.Path, *, preview: bool
+) -> PrintResult | None:
+    """Download the label, stamp the logo and print it (or preview it).
+
+    Raises:
+        RuntimeError: (incl. ibp_printing.PrintError) if the label could not be
+            sent to any printer; the caller refunds the postage.
+    """
+    try:
+        with console.task_message("Printing postage"):
+            image = grab_png_from_url(shipment.postage_label.label_url)
+
+            if logo is not None:
+                image.paste(logo, (450, 425))
+
+            if preview:
+                preview_image(image)
+                return None
+
+            return print_to_first_available(
+                image,
+                job_name=f"Shipping Label {shipment.id}",
+                track_timeout_s=PRINT_TRACK_TIMEOUT_S,
+            )
+    except RuntimeError as exc:
+        questionary.print(f"  Error: {exc}", style="fg:red")
+        questionary.print(f"  Printer logs: {log_dir}", style="fg:red")
+        raise
 
 
 def load_logo() -> Image.Image:
@@ -106,6 +179,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=main.__doc__)
 
     parser.add_argument("--config", type=pathlib.Path, help="Configuration file path")
+    parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="open labels in an image viewer instead of printing them (development)",
+    )
 
     subparsers = parser.add_subparsers(
         dest="shipping_type", required=True, help="Select command"
@@ -146,6 +224,7 @@ def main():
         parser.error("--config is required for shipping commands")
 
     config = load_config(args.config)
+    log_dir = configure_logging(console=False)
 
     easypost_client = easypost.EasyPostClient(config.easypost.apikey)
     server = Server.from_config(config.ibp)
@@ -199,15 +278,9 @@ def main():
                 raise
 
         with request_refund_on_error(shipment):
-            try:
-                with console.task_message("Printing postage"):
-                    label_url = shipment.postage_label.label_url
-                    image = grab_png_from_url(label_url)
+            result = print_postage(shipment, logo, log_dir, preview=args.preview)
 
-                    if logo is not None:
-                        image.paste(logo, (450, 425))
-
-                    print_image(image)
-            except RuntimeError as exc:
-                questionary.print(f"  Error: {exc}", style="fg:red")
-                raise
+        # Outside the refund context: the job was spooled, so the label may well
+        # have printed. Refunding here could leave a printed label with no postage.
+        if result is not None:
+            warn_if_job_not_ok(result, log_dir)
