@@ -34,7 +34,7 @@ package = true
 [tool.uv.sources]
 # For local development against a checkout next to this repo, temporarily use:
 #   ibp-printing = { path = "../ibp-printing", editable = true }
-ibp-printing = { git = "https://github.com/jonkensta/ibp-printing", tag = "v0.1.1" }
+ibp-printing = { path = "../ibp-printing", editable = true }
 
 [tool.setuptools]
 packages = ["shippy", "shippy.assets"]
