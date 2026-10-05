@@ -135,7 +135,10 @@ What shippy does once postage has been bought:
   the package will not ship, delete the file from `to-print\` first, so the
   watcher does not print it too. If the file is already gone, the watcher has
   picked it up: check the printer (and the `printed\` and `check-printer\`
-  folders) first. shippy then carries on with the next package. Only if the
+  folders) first. shippy shows this in a highlighted **LABEL QUEUED - DO NOT
+  CREATE IT AGAIN** block with the recipient and tracking code: the label will
+  print automatically when the printer works, so **do not create it again**.
+  shippy then carries on with the next package. Only if the
   label cannot even be saved is the postage refunded (shippy says so).
 - **The label was sent to a printer but the queue reported a problem**, or it
   could not be confirmed that the job reached the printer: the postage is
@@ -145,6 +148,34 @@ What shippy does once postage has been bought:
 - **Printing failed with an unexpected error** (anything other than "no
   printer could take it"): shippy cannot tell whether the job reached the
   printer, so it treats it the same way: warning, no refund, nothing queued.
+
+### Labels that were already bought
+
+Every label shippy buys is recorded in the label journal shared with
+shippy-gui and the IBP label watcher (`labels.jsonl` in
+`%LOCALAPPDATA%\ibp-printing`, `~/.local/state/ibp-printing` on Linux), with
+what happened to it: printed, queued in `to-print\`, waiting at the printer
+(check printer) or refunded.
+
+- **Before buying postage** (in every mode: individual, bulk and manual),
+  shippy looks up the recipient's address. If a label for them is still
+  queued or waiting at the printer, or was bought or printed in the last 12
+  hours, it asks, for example:
+
+  ```
+  A label for Jane Doe, 123 Prison Rd, Huntsville, TX is already queued — it
+  will print automatically when the printer works (tracking 9400...). Create
+  another label anyway? (y/N)
+  ```
+
+  (or "waiting at the printer: check the printer before reprinting", or
+  "printed at HH:MM"). The default is **No**: the shipment is skipped, nothing
+  is bought, and shippy prints `Skipped: no label created for ...`. In bulk
+  mode this means a second box to the same unit within 12 hours needs an
+  explicit `y`. The answer is logged.
+- **At startup and after each shipment**, shippy prints
+  `N label(s) waiting to print (already bought: do NOT create them again)`
+  when labels are queued or waiting at the printer.
 
 ### Development: `--preview`
 
