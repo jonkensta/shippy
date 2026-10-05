@@ -25,7 +25,7 @@ from ibp_printing.diagnostics import build_report
 from ibp_printing.log import get_logger
 from PIL import Image
 
-from . import console, shipping
+from . import console, labels, shipping
 from .misc import build_tempfile, grab_png_from_url
 from .models import Config
 from .server import Server
@@ -39,6 +39,10 @@ LOG_APP_NAME = "shippy"
 DIAG_LOG_APP_NAME = "diag"
 
 logger = get_logger("shippy")
+
+# Volunteer-facing styles: warnings, and the "do not create it again" banner.
+WARNING_STYLE = "fg:yellow"
+BANNER_STYLE = "bold fg:ansiblack bg:ansiyellow"
 
 # Outcomes whose raw value reads badly after "the printer queue reported".
 OUTCOME_DETAILS = {
@@ -178,7 +182,54 @@ def request_refund_on_error(easypost_client, shipment):
     except Exception:
         with console.task_message("Requesting refund"):
             easypost_client.shipment.refund(shipment.id)
+        labels.update_status(shipment, labels.STATUS_REFUNDED)
         raise
+
+
+def confirm_not_duplicate(identity: labels.LabelIdentity) -> bool:
+    """Stop before buying postage when this recipient already has a label.
+
+    Returns True to go ahead. Every flow (individual, bulk, manual) asks; the
+    default answer is No, which skips this shipment. The journal being
+    unavailable never blocks shipping.
+    """
+    records = labels.find_duplicates(identity)
+    if not records:
+        return True
+
+    trackings = ", ".join(str(record.tracking_code) for record in records)
+    questionary.print(
+        "  POSSIBLE DUPLICATE LABEL - postage for this recipient was already bought",
+        style=BANNER_STYLE,
+    )
+    answer = questionary.confirm(
+        labels.duplicate_question(records), default=False
+    ).ask()
+    create = answer is True
+    logger.warning(
+        "possible duplicate label for %s (existing: %s): volunteer chose %s",
+        identity.recipient_label,
+        trackings,
+        "to create another label" if create else "NOT to create another label",
+    )
+    if not create:
+        questionary.print(
+            f"  Skipped: no label created for {identity.recipient_label} "
+            f"(already has tracking {trackings}).",
+            style=WARNING_STYLE,
+        )
+    return create
+
+
+def report_pending_labels() -> None:
+    """One-line notice of labels that are bought but not printed yet."""
+    count = len(labels.pending_labels())
+    if count:
+        questionary.print(
+            f"  {count} label(s) waiting to print (already bought: do NOT "
+            "create them again)",
+            style=BANNER_STYLE,
+        )
 
 
 def prepare_label(shipment, logo: Image.Image | None) -> Image.Image:
@@ -210,7 +261,7 @@ def print_label(shipment, image: Image.Image, log_dir: pathlib.Path) -> PrintRes
 
 
 def save_unprinted_label(
-    shipment, image: Image.Image, error: PrintError
+    shipment, image: Image.Image, error: PrintError, meta: dict | None = None
 ) -> pathlib.Path:
     """Queue a label no printer took for the label watcher.
 
@@ -221,7 +272,7 @@ def save_unprinted_label(
     # caller's refund context, so a console failure after a successful save
     # would refund a label that is already queued to print.
     try:
-        return save_for_retry(image, name=shipment_ref(shipment))
+        return save_for_retry(image, name=shipment_ref(shipment), meta=meta)
     except Exception as exc:
         questionary.print(
             f"  The label did NOT print ({error}) and could not be saved to print "
@@ -232,9 +283,25 @@ def save_unprinted_label(
 
 
 def report_saved_label(
-    shipment, path: pathlib.Path, error: PrintError, log_dir: pathlib.Path
+    shipment,
+    path: pathlib.Path,
+    error: PrintError,
+    log_dir: pathlib.Path,
+    identity: labels.LabelIdentity | None = None,
 ) -> None:
     """Tell the volunteer the label was saved and postage was kept."""
+    recipient = identity.recipient_label if identity else "this recipient"
+    banner = [
+        "LABEL QUEUED - DO NOT CREATE IT AGAIN",
+        f"Recipient: {recipient}",
+        f"Tracking:  {shipment_ref(shipment)}",
+        "It will print automatically when the printer works.",
+        "Do NOT create this label again.",
+    ]
+    width = max(len(line) for line in banner) + 4
+    questionary.print("")
+    for line in banner:
+        questionary.print(f"  {('  ' + line).ljust(width)}", style=BANNER_STYLE)
     questionary.print(
         f"  The label did NOT print: {error}\n"
         f"  It was saved to: {path}\n"
@@ -347,7 +414,15 @@ def main():
             style="fg:yellow",
         )
 
+    report_pending_labels()
+
     for to_addr_dict, weight in args.generate_addresses(config):
+        # Before anything is bought: is a label for this recipient already
+        # queued, waiting at the printer, or recently made?
+        identity = labels.identity_for(to_addr_dict)
+        if not confirm_not_duplicate(identity):
+            continue
+
         to_addr = shipping.build_address(easypost_client, **to_addr_dict)
 
         try:
@@ -365,16 +440,27 @@ def main():
             shipment = shipping.build_shipment(
                 easypost_client, from_addr, to_addr, weight, config.parcel
             )
+        record = labels.record_purchase(identity, shipment)
 
-        ship_label(easypost_client, shipment, logo, args.preview, log_dir)
+        ship_label(
+            easypost_client,
+            shipment,
+            logo,
+            args.preview,
+            log_dir,
+            journal=(identity, record),
+        )
+        report_pending_labels()
 
 
-def ship_label(
+def ship_label(  # pylint: disable=too-many-arguments
     easypost_client,
     shipment,
     logo: Image.Image | None,
     preview: bool,
     log_dir: pathlib.Path,
+    *,
+    journal: tuple[labels.LabelIdentity | None, object] = (None, None),
 ) -> None:
     """Turn a bought shipment into a printed (or saved) label.
 
@@ -383,7 +469,11 @@ def ship_label(
     not be saved for the label watcher. Everything after a print call was
     made (other than a definite PrintError) or after the label was saved sits
     outside any refund context.
+
+    ``journal`` is the label's (identity, record) in the shared label journal;
+    its status is updated with the print outcome.
     """
+    identity, record = journal
     # No label image yet (download/logo failed): nothing can print, refund.
     with request_refund_on_error(easypost_client, shipment):
         image = prepare_label(shipment, logo)
@@ -397,16 +487,23 @@ def ship_label(
         # The label definitely reached no printer. Keep the postage and queue
         # the label for the label watcher; refund only if the label cannot even
         # be saved (save_unprinted_label re-raises).
+        meta = labels.retry_meta(identity, shipment, record)
         with request_refund_on_error(easypost_client, shipment):
-            path = save_unprinted_label(shipment, image, error)
-        report_saved_label(shipment, path, error, log_dir)
+            path = save_unprinted_label(shipment, image, error, meta)
+        labels.update_status(shipment, labels.STATUS_QUEUED, file=path)
+        report_saved_label(shipment, path, error, log_dir, identity)
         return
     except Exception as exc:  # pylint: disable=broad-exception-caught
         # Not a PrintError: we can't tell whether the job reached the spooler,
         # so treat it as uncertain (no refund, no automatic retry).
+        labels.update_status(shipment, labels.STATUS_CHECK_PRINTER)
         warn_print_raised(shipment, exc, log_dir)
         return
 
     # The job was spooled, so the label may well have printed. Refunding here
     # could leave a printed label with no postage.
+    labels.update_status(
+        shipment,
+        labels.STATUS_PRINTED if result.outcome.ok else labels.STATUS_CHECK_PRINTER,
+    )
     warn_if_job_not_ok(shipment, result, log_dir)
