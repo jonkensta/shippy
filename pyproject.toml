@@ -21,6 +21,7 @@ dev = [
     "black>=26.3.1",
     "mypy>=1.16.1",
     "pylint>=3.3.7",
+    "pytest>=9.1.1",
     "types-pywin32>=310.0.0.20250516",
     "types-requests>=2.32.4.20250611",
 ]
