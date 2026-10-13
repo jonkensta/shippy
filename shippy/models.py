@@ -2,7 +2,7 @@
 
 import math
 
-from pydantic import BaseModel, HttpUrl, PositiveFloat, field_validator, model_validator
+from pydantic import BaseModel, HttpUrl, PositiveFloat, model_validator
 
 # USPS prices Ground Advantage by dimensional weight above one cubic foot.
 CUBIC_FOOT_IN3 = 1728.0
@@ -14,35 +14,11 @@ class IbpConfig(BaseModel):
     """Model for IBP configuration.
 
     The new IBP FastAPI backend does not use API keys, so only the base URL
-    is needed. ``unit_address_name`` is the recipient name injected into unit
-    (bulk) addresses; the legacy server supplied this from its own config.
+    is needed. The return address and unit recipient name come from the
+    server's ``/shipping-settings`` endpoint, not from this config.
     """
 
     url: HttpUrl
-    unit_address_name: str = "ATTN: MAILROOM STAFF"
-
-
-class ReturnAddressConfig(BaseModel):
-    """Model for the organization return address.
-
-    The legacy server served this from server-side config; it now lives in
-    shippy's own ``[return_address]`` config section.
-    """
-
-    name: str
-    street1: str
-    street2: str = ""
-    city: str
-    state: str
-    zipcode: str
-
-    @field_validator("name", "street1", "city", "state", "zipcode")
-    @classmethod
-    def validate_required_text(cls, value: str) -> str:
-        """Ensure required address fields are not empty."""
-        if not value.strip():
-            raise ValueError("Required address fields cannot be empty")
-        return value
 
 
 class EasypostConfig(BaseModel):
@@ -130,5 +106,4 @@ class Config(BaseModel):
     ibp: IbpConfig
     easypost: EasypostConfig
     googlemaps: GoogleMapsConfig
-    return_address: ReturnAddressConfig
     parcel: ParcelConfig = ParcelConfig()
