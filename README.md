@@ -44,32 +44,30 @@ To set up the `shippy` project for development, ensure you have [uv](https://git
 The application requires a configuration file for the internal IBP server and the EasyPost API.
 
 1.  Create a `config.ini` file (see `sample.ini` for a full example).
-2.  Populate it with your API keys, server URL, and return address:
+2.  Populate it with your API keys and the server URL:
 
     ```
     [ibp]
-    url = http://your_ibp_server_url:8000
+    url = http://192.168.1.156/api
 
     [easypost]
     apikey = your_easypost_api_key_here
 
-    [return_address]
-    name = Inside Books Project
-    street1 = PO Box 301029
-    street2 =
-    city = Austin
-    state = Texas
-    zipcode = 78703
+    [googlemaps]
+    apikey = your_googlemaps_api_key_here
     ```
 
-    - `ibp.url`: The base URL of the IBP FastAPI backend. Both the direct
-      form (`http://host:8000`) and the nginx-prefixed form
-      (`https://host/api`) work.
-    - `ibp.unit_address_name`: Optional recipient name for unit (bulk)
-      addresses; defaults to `ATTN: MAILROOM STAFF`.
+    - `ibp.url`: The base URL of the IBP backend API. The nginx-prefixed
+      form (`http://host/api`) and the direct form (`http://host:8000`)
+      both work. No IBP API key is needed; an old `apikey` line is ignored.
     - `easypost.apikey`: Your EasyPost API key.
-    - `[return_address]`: The organization return address printed on every
-      shipment.
+    - `googlemaps.apikey`: Your Google Maps API key (address autocompletion
+      in `manual` mode).
+
+    The return address and the recipient name for unit (bulk) shipments
+    (`ATTN: MAILROOM STAFF`) are not set in `config.ini`: shippy reads them
+    from the server's `/shipping-settings`, which volunteers can edit in the
+    IBP web app.
 
 ## Usage
 
@@ -85,7 +83,10 @@ shippy --config path/to/your/config.ini <shipping_type>
 
 Replace `<shipping_type>` with one of the following commands:
 
-- `individual`: For shipping individual packages.
+- `individual`: For shipping individual packages. Scan the request label
+  (new `TEX-12345678-0` style or a legacy number). shippy warns if the
+  inmate's unit may be out of date, and asks for confirmation before buying
+  postage for a request marked tossed.
 - `bulk`: For shipping bulk packages.
 - `manual`: For manually entering address details.
 

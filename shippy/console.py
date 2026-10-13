@@ -95,6 +95,14 @@ def query_request_id() -> (
     return jurisdiction, int(inmate_id), int(index)
 
 
+def confirm_tossed() -> bool:
+    """Ask the user to confirm shipping a request that was marked tossed."""
+    answer = questionary.confirm(
+        "Buy postage for this TOSSED request anyway?", default=False
+    ).ask()
+    return bool(answer)
+
+
 def query_address(gmaps: googlemaps.Client) -> typing.Optional[typing.Dict[str, str]]:
     """Query an address from the user."""
     name = questionary.text("Enter name:").ask()
