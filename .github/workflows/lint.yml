@@ -34,3 +34,6 @@ jobs:
 
       - name: Typecheck
         run: uv run mypy shippy
+
+      - name: Test
+        run: uv run pytest
