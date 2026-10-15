@@ -53,6 +53,21 @@ def query_weight() -> typing.Optional[int]:
     return int(weight) if weight is not None else None
 
 
+def query_small_box(weight: int, min_weight: int) -> typing.Optional[bool]:
+    """Ask whether a package of ``weight`` pounds is in a box of one cubic foot or less.
+
+    Returns False without asking below ``min_weight`` pounds, where the box size
+    can't change the rate. Returns None if the volunteer cancels (Ctrl+C).
+    The default answer is No: a wrong "yes" earns a USPS adjustment charge.
+    """
+    if weight < min_weight:
+        return False
+    return questionary.confirm(
+        "Is the box 12 x 12 x 12 inches or smaller (1,728 cubic inches or less)?",
+        default=False,
+    ).ask()
+
+
 def query_request_id() -> (
     typing.Optional[typing.Union[typing.Tuple[str, int, int], int]]
 ):

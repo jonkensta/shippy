@@ -73,7 +73,11 @@ def generate_addresses_bulk(config: Config):
         if weight is None:
             continue
 
-        yield to_addr, weight
+        small_box = console.query_small_box(weight, shipping.BOX_QUESTION_MIN_LB)
+        if small_box is None:
+            continue
+
+        yield to_addr, weight, small_box
 
 
 def generate_addresses_individual(config: Config):
@@ -91,7 +95,11 @@ def generate_addresses_individual(config: Config):
         if weight is None:
             continue
 
-        yield to_addr, weight
+        small_box = console.query_small_box(weight, shipping.BOX_QUESTION_MIN_LB)
+        if small_box is None:
+            continue
+
+        yield to_addr, weight, small_box
 
 
 def generate_addresses_manual(config: Config):
@@ -107,7 +115,11 @@ def generate_addresses_manual(config: Config):
         if weight is None:
             continue
 
-        yield to_addr, weight
+        small_box = console.query_small_box(weight, shipping.BOX_QUESTION_MIN_LB)
+        if small_box is None:
+            continue
+
+        yield to_addr, weight, small_box
 
 
 def run_diagnose_printer(_args):
@@ -440,7 +452,7 @@ def main():
 
     report_pending_labels()
 
-    for to_addr_dict, weight in args.generate_addresses(config):
+    for to_addr_dict, weight, small_box in args.generate_addresses(config):
         # Before anything is bought: is a label for this recipient already
         # queued, waiting at the printer, or recently made?
         identity = labels.identity_for(to_addr_dict)
@@ -463,10 +475,13 @@ def main():
         if not args.preview and not check_printer_before_purchase():
             continue
 
-        with console.task_message("Purchasing postage"):
-            shipment = shipping.build_shipment(
-                easypost_client, from_addr, to_addr, weight, config.parcel
-            )
+        shipment = purchase_postage(
+            easypost_client,
+            from_addr,
+            to_addr,
+            weight,
+            config.parcel.dimensions(small_box),
+        )
         record = labels.record_purchase(identity, shipment)
 
         ship_label(
@@ -478,6 +493,28 @@ def main():
             journal=(identity, record),
         )
         report_pending_labels()
+
+
+def purchase_postage(  # pylint: disable=too-many-arguments
+    easypost_client, from_addr, to_addr, weight: float, dimensions
+):
+    """Quote the package, show the rates being compared, then buy the cheapest."""
+    with console.task_message("Getting rates"):
+        quote = shipping.quote_shipment(
+            easypost_client, from_addr, to_addr, weight, dimensions
+        )
+    rate = shipping.cheapest_rate(quote)
+    show_rate_summary(shipping.summarize_rates(quote.rates, rate))
+    with console.task_message("Purchasing postage"):
+        return shipping.buy_shipment(easypost_client, quote, rate)
+
+
+def show_rate_summary(summary: shipping.RateSummary) -> None:
+    """Print the price comparison (and any warning) before buying."""
+    questionary.print(f"  {summary.line}", style="fg:white")
+    if summary.warning:
+        questionary.print(f"  Warning: {summary.warning}", style=WARNING_STYLE)
+    logger.info("rates: %s", summary.line)
 
 
 def ship_label(  # pylint: disable=too-many-arguments
