@@ -127,10 +127,10 @@ class LoadConfigTests(unittest.TestCase):
         parcel = self.load(
             BASE_CONFIG
             + "\n[parcel]\nlength = 18\nwidth = 14\nheight = 12\n"
-            + "small_length = 14\nsmall_width = 12\nsmall_height = 10\n"
+            + "small_length = 18\nsmall_width = 12\nsmall_height = 8\n"
         ).parcel
         self.assertEqual(parcel.dimensions(False), (18.0, 14.0, 12.0))
-        self.assertEqual(parcel.dimensions(True), (14.0, 12.0, 10.0))
+        self.assertEqual(parcel.dimensions(True), (18.0, 12.0, 8.0))
 
 
 if __name__ == "__main__":
