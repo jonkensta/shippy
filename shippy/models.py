@@ -1,9 +1,13 @@
 """Pydantic models for configuration checking."""
 
+import math
+
 from pydantic import BaseModel, HttpUrl, PositiveFloat, model_validator
 
 # USPS prices Ground Advantage by dimensional weight above one cubic foot.
 CUBIC_FOOT_IN3 = 1728.0
+# Above this length per side USPS adds Ground Advantage surcharges.
+MAX_SIDE_IN = 22.0
 
 
 class IbpConfig(BaseModel):
@@ -48,12 +52,25 @@ class ParcelConfig(BaseModel):
 
     @model_validator(mode="after")
     def small_box_within_cubic_foot(self) -> "ParcelConfig":
-        """Reject a "small box" that USPS would price by dimensional weight."""
-        volume = self.small_length * self.small_width * self.small_height
+        """Reject a "small box" that USPS would price by dimensional weight.
+
+        USPS rounds each side up to a whole inch before multiplying, so the
+        check does too; and no side may pass the 22-inch surcharge length.
+        """
+        sides = [
+            math.ceil(side)
+            for side in (self.small_length, self.small_width, self.small_height)
+        ]
+        volume = math.prod(sides)
         if volume > CUBIC_FOOT_IN3:
             raise ValueError(
-                f"small box is {volume:g} cubic inches; it must be at most "
-                f"{CUBIC_FOOT_IN3:g} (one cubic foot)"
+                f"small box is {volume:g} cubic inches after USPS rounds each "
+                f"side up; it must be at most {CUBIC_FOOT_IN3:g} (one cubic foot)"
+            )
+        if max(sides) > MAX_SIDE_IN:
+            raise ValueError(
+                f"small box has a {max(sides):g}-inch side; no side may be "
+                f"longer than {MAX_SIDE_IN:g} inches"
             )
         return self
 

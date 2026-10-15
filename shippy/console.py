@@ -53,10 +53,26 @@ def query_weight() -> typing.Optional[int]:
     return int(weight) if weight is not None else None
 
 
-def query_small_box(weight: int, min_weight: int) -> typing.Optional[bool]:
-    """Ask whether a package of ``weight`` pounds is in a box of one cubic foot or less.
+def small_box_question(dimensions: typing.Sequence[float]) -> str:
+    """The box-size question for the configured small box (inches)."""
+    sides = " x ".join(f"{side:g}" for side in dimensions)
+    if len(set(dimensions)) == 1:
+        rule = f"no side longer than {dimensions[0]:g} inches"
+    else:
+        rule = "each side no longer than the matching one"
+    return f"Does the box fit within {sides} inches ({rule})?"
 
-    It's the volume (length x width x height) that counts, not each side.
+
+def query_small_box(
+    weight: int, min_weight: int, dimensions: typing.Sequence[float]
+) -> typing.Optional[bool]:
+    """Ask whether a package of ``weight`` pounds fits in the small box.
+
+    The small box (``dimensions``, from the config) is what gets declared on a
+    Yes, so every side must fit, not just the volume: a long, thin box can be
+    under one cubic foot but over USPS's 22-inch side limit, and USPS rounds
+    each side up before multiplying. Declaring the small box therefore never
+    understates any dimension.
 
     Returns False without asking below ``min_weight`` pounds, where the box size
     can't change the rate. Returns None if the volunteer cancels (Ctrl+C).
@@ -64,10 +80,7 @@ def query_small_box(weight: int, min_weight: int) -> typing.Optional[bool]:
     """
     if weight < min_weight:
         return False
-    return questionary.confirm(
-        "Is the box 1,728 cubic inches or less (12 x 12 x 12 or smaller)?",
-        default=False,
-    ).ask()
+    return questionary.confirm(small_box_question(dimensions), default=False).ask()
 
 
 def query_request_id() -> (

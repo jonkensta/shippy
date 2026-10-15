@@ -73,7 +73,9 @@ def generate_addresses_bulk(config: Config):
         if weight is None:
             continue
 
-        small_box = console.query_small_box(weight, shipping.BOX_QUESTION_MIN_LB)
+        small_box = console.query_small_box(
+            weight, shipping.BOX_QUESTION_MIN_LB, config.parcel.dimensions(True)
+        )
         if small_box is None:
             continue
 
@@ -95,7 +97,9 @@ def generate_addresses_individual(config: Config):
         if weight is None:
             continue
 
-        small_box = console.query_small_box(weight, shipping.BOX_QUESTION_MIN_LB)
+        small_box = console.query_small_box(
+            weight, shipping.BOX_QUESTION_MIN_LB, config.parcel.dimensions(True)
+        )
         if small_box is None:
             continue
 
@@ -115,7 +119,9 @@ def generate_addresses_manual(config: Config):
         if weight is None:
             continue
 
-        small_box = console.query_small_box(weight, shipping.BOX_QUESTION_MIN_LB)
+        small_box = console.query_small_box(
+            weight, shipping.BOX_QUESTION_MIN_LB, config.parcel.dimensions(True)
+        )
         if small_box is None:
             continue
 
