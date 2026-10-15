@@ -54,8 +54,11 @@ class ParcelConfig(BaseModel):
     def small_box_is_one_cubic_foot(self) -> "ParcelConfig":
         """Require the declared small box to be exactly one cubic foot.
 
-        USPS rounds each side up to a whole inch before multiplying, so the
-        check does too; and no side may pass the 22-inch surcharge length.
+        Each side must be a whole number of inches. USPS rounds sides up to a
+        whole inch for dimensional weight but cubic pricing rounds them down to
+        the quarter inch, so a fractional side (e.g. 11.1, which rounds up to a
+        12-inch cube) would be priced as a much smaller cubic tier. No side may
+        pass the 22-inch surcharge length.
 
         The rounded volume must EQUAL 1,728 cubic inches, not just stay under
         it: EasyPost applies USPS cubic pricing, so a smaller declared box
@@ -66,15 +69,18 @@ class ParcelConfig(BaseModel):
         # Known trade-off: always declaring the top tier means really small
         # boxes miss cheaper cubic tiers. Deferred to a future change that
         # declares real dimensions (or lets volunteers pick a box).
-        sides = [
-            math.ceil(side)
-            for side in (self.small_length, self.small_width, self.small_height)
-        ]
+        given = (self.small_length, self.small_width, self.small_height)
+        fractional = [side for side in given if not float(side).is_integer()]
+        if fractional:
+            raise ValueError(
+                f"small box sides must be whole inches; got {fractional[0]:g}"
+            )
+        sides = [int(side) for side in given]
         volume = math.prod(sides)
         if volume != CUBIC_FOOT_IN3:
             raise ValueError(
-                f"small box is {volume:g} cubic inches after USPS rounds each "
-                f"side up; it must be exactly {CUBIC_FOOT_IN3:g} (one cubic foot)"
+                f"small box is {volume:g} cubic inches; it must be exactly "
+                f"{CUBIC_FOOT_IN3:g} (one cubic foot)"
             )
         if max(sides) > MAX_SIDE_IN:
             raise ValueError(

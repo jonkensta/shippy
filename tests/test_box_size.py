@@ -102,10 +102,19 @@ class ParcelDimensionsTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             ParcelConfig(small_length=12, small_width=12, small_height=6)
 
-    def test_fractional_sides_are_rounded_up_before_the_volume_check(self):
-        # 15.5 x 11 x 10 = 1,705 as given, but USPS measures 16 x 11 x 10 = 1,760.
+    def test_fractional_sides_are_rejected(self):
+        # 15.5 x 11 x 10: USPS would measure 16 x 11 x 10 = 1,760.
         with self.assertRaises(ValidationError):
             ParcelConfig(small_length=15.5, small_width=11, small_height=10)
+
+    def test_fraction_that_rounds_up_to_a_cubic_foot_is_rejected(self):
+        # 11.1 rounds up to a 12-inch cube, but cubic pricing would see 11.
+        with self.assertRaises(ValidationError):
+            ParcelConfig(small_length=11.1, small_width=11.1, small_height=11.1)
+
+    def test_whole_number_floats_are_accepted(self):
+        config = ParcelConfig(small_length=12.0, small_width=12.0, small_height=12.0)
+        self.assertEqual(config.dimensions(True), CUBE)
 
     def test_side_over_22_inches_is_rejected(self):
         # 24 x 9 x 8 = 1,728 cubic inches, but one side is over 22 inches.
