@@ -12,7 +12,7 @@ import time
 from typing import Callable
 
 import questionary
-from ibp_printing import discover
+from ibp_printing import discover, quiet
 from ibp_printing.log import get_logger
 
 logger = get_logger("shippy.printer_gate")
@@ -82,10 +82,17 @@ def wait_for_printer(
     wait_for_continue: Callable[[float], bool] = wait_for_enter,
     say: Callable[..., None] = questionary.print,
     interval_s: float = POLL_INTERVAL_S,
+    when: str = "startup",
 ) -> bool:
     """Block until a usable label printer exists or the volunteer continues anyway.
 
-    Returns immediately and silently when a printer is already usable.
+    Returns immediately and silently when a printer is already usable. The
+    first check logs a full discovery for diagnosis; the repeated polls after
+    it run inside ``quiet()`` so they don't flood the log, and only the
+    changes (waiting, printer found, continued without one) are logged.
+
+    Args:
+        when: Where the gate runs ("startup", "before purchase"), for the log.
 
     Returns:
         True once a printer is usable; False if the volunteer chose to continue
@@ -98,7 +105,7 @@ def wait_for_printer(
     if names:
         return True
 
-    logger.warning("no usable label printer; waiting for one")
+    logger.info("no label printer at %s; waiting", when)
     say("")
     say("  NO LABEL PRINTER FOUND  ", style=WAITING_STYLE)
     say(
@@ -115,16 +122,18 @@ def wait_for_printer(
     started = time.monotonic()
     while True:
         if wait_for_continue(interval_s):
-            logger.warning(
-                "volunteer continued without a label printer after %.0f s",
+            logger.info(
+                "continued without a printer (%s) after %.0f s",
+                when,
                 time.monotonic() - started,
             )
             say("  Continuing without a label printer.", style="fg:yellow")
             return False
-        names = find_printers()
+        with quiet():
+            names = find_printers()
         if names:
             logger.info(
-                "label printer ready after %.0f s: %s",
+                "label printer found after %.0f s: %s",
                 time.monotonic() - started,
                 ", ".join(names),
             )

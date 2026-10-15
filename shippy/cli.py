@@ -422,7 +422,7 @@ def main():
     # Crews often start before Windows has recognised the label printer.
     if not args.preview:
         try:
-            printer_gate.wait_for_printer()
+            printer_gate.wait_for_printer(when="before purchase")
         except KeyboardInterrupt:
             sys.exit(1)
 

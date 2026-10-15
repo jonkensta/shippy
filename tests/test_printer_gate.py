@@ -2,6 +2,8 @@
 
 import unittest
 
+from ibp_printing import log as log_module
+
 from shippy import printer_gate
 
 
@@ -56,6 +58,25 @@ class WaitForPrinterTests(unittest.TestCase):
         self.assertEqual(waits, [2.0, 2.0])
         self.assertTrue(any("NO LABEL PRINTER FOUND" in line for line in say.lines))
         self.assertIn("Label printer ready: BETTY", say.lines[-1])
+
+    def test_only_repeated_polls_are_quiet(self):
+        quiet_flags = []
+
+        def find():
+            # quiet() sets a context flag; record it for each check.
+            quiet_flags.append(
+                log_module._QUIET.get()
+            )  # pylint: disable=protected-access
+            return ["BOB"] if len(quiet_flags) == 3 else []
+
+        ready = printer_gate.wait_for_printer(
+            find_printers=find,
+            wait_for_continue=lambda _t: False,
+            say=FakeConsole(),
+            when="before purchase",
+        )
+        self.assertTrue(ready)
+        self.assertEqual(quiet_flags, [False, True, True])
 
     def test_enter_continues_without_printer(self):
         say = FakeConsole()
