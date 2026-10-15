@@ -25,7 +25,7 @@ from ibp_printing.diagnostics import build_report
 from ibp_printing.log import get_logger
 from PIL import Image
 
-from . import console, labels, shipping
+from . import console, labels, printer_gate, shipping
 from .misc import build_tempfile, grab_png_from_url
 from .models import Config
 from .server import Server
@@ -221,6 +221,23 @@ def confirm_not_duplicate(identity: labels.LabelIdentity) -> bool:
     return create
 
 
+def check_printer_before_purchase() -> bool:
+    """Make sure a label printer is ready (or skipped on purpose) before buying.
+
+    Returns False when the volunteer pressed Ctrl+C, which cancels this
+    shipment only, like Ctrl+C at any other prompt.
+    """
+    try:
+        printer_gate.wait_for_printer()
+    except KeyboardInterrupt:
+        questionary.print(
+            "  Cancelled: no postage was bought for this shipment.",
+            style=WARNING_STYLE,
+        )
+        return False
+    return True
+
+
 def report_pending_labels() -> None:
     """One-line notice of labels that are bought but not printed yet."""
     count = len(labels.pending_labels())
@@ -402,6 +419,13 @@ def main():
         "\nWelcome! Answer prompts to print postage, hit CTRL+C to cancel and restart\n"
     )
 
+    # Crews often start before Windows has recognised the label printer.
+    if not args.preview:
+        try:
+            printer_gate.wait_for_printer()
+        except KeyboardInterrupt:
+            sys.exit(1)
+
     with console.task_message("Grabbing return address from IBP server"):
         from_addr = shipping.build_address(easypost_client, **server.return_address())
 
@@ -435,6 +459,9 @@ def main():
             )
 
         weight = 16.0 * weight  # Convert to ounces.
+
+        if not args.preview and not check_printer_before_purchase():
+            continue
 
         with console.task_message("Purchasing postage"):
             shipment = shipping.build_shipment(
