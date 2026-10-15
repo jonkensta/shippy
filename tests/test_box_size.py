@@ -22,38 +22,53 @@ class QuerySmallBoxTests(unittest.TestCase):
 
     def test_light_package_is_not_asked(self):
         with mock.patch.object(console.questionary, "confirm") as confirm:
-            answer = console.query_small_box(3, shipping.BOX_QUESTION_MIN_LB, CUBE)
+            answer = console.query_small_box(3, shipping.BOX_QUESTION_MIN_LB)
         self.assertIs(answer, False)
         confirm.assert_not_called()
 
     def test_heavy_package_is_asked_with_default_no(self):
         with mock.patch.object(console.questionary, "confirm") as confirm:
             confirm.return_value.ask.return_value = True
-            answer = console.query_small_box(4, shipping.BOX_QUESTION_MIN_LB, CUBE)
+            answer = console.query_small_box(4, shipping.BOX_QUESTION_MIN_LB)
         self.assertIs(answer, True)
         self.assertIs(confirm.call_args.kwargs["default"], False)
 
-    def test_question_names_the_configured_box(self):
+    def test_question_is_about_rounded_volume_and_longest_side(self):
         with mock.patch.object(console.questionary, "confirm") as confirm:
-            console.query_small_box(5, shipping.BOX_QUESTION_MIN_LB, CUBE)
+            console.query_small_box(5, shipping.BOX_QUESTION_MIN_LB)
         self.assertEqual(
             confirm.call_args.args[0],
-            "Does the box fit within 12 x 12 x 12 inches "
-            "(no side longer than 12 inches)?",
+            "Is the box 1,728 cubic inches or less (length x width x height, "
+            "each side rounded up) with no side over 22 inches?",
         )
 
-    def test_question_for_a_non_cube_box(self):
-        question = console.small_box_question((14.0, 12.0, 10.0))
-        self.assertEqual(
-            question,
-            "Does the box fit within 14 x 12 x 10 inches "
-            "(each side no longer than the matching one)?",
-        )
+    def test_examples_are_shown_before_the_question(self):
+        order = mock.Mock()
+        with (
+            mock.patch.object(console.questionary, "confirm") as confirm,
+            mock.patch.object(console.questionary, "print") as say,
+        ):
+            order.attach_mock(say, "print")
+            order.attach_mock(confirm, "confirm")
+            console.query_small_box(5, shipping.BOX_QUESTION_MIN_LB)
+        shown = "\n".join(call.args[0] for call in say.call_args_list)
+        for example in ("12x12x12", "18x12x8", "16x12x9", "20x10x8"):
+            self.assertIn(example, shown)
+        self.assertIn("14x12x11 (1,848", shown)
+        self.assertIn("24x10x7 (side over 22", shown)
+        self.assertIn("not sure, answer No", shown)
+        names = [call[0] for call in order.mock_calls]
+        self.assertLess(names.index("print"), names.index("confirm"))
+
+    def test_light_package_shows_no_examples(self):
+        with mock.patch.object(console.questionary, "print") as say:
+            console.query_small_box(3, shipping.BOX_QUESTION_MIN_LB)
+        say.assert_not_called()
 
     def test_cancel_returns_none(self):
         with mock.patch.object(console.questionary, "confirm") as confirm:
             confirm.return_value.ask.return_value = None
-            answer = console.query_small_box(10, shipping.BOX_QUESTION_MIN_LB, CUBE)
+            answer = console.query_small_box(10, shipping.BOX_QUESTION_MIN_LB)
         self.assertIsNone(answer)
 
 

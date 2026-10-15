@@ -53,26 +53,27 @@ def query_weight() -> typing.Optional[int]:
     return int(weight) if weight is not None else None
 
 
-def small_box_question(dimensions: typing.Sequence[float]) -> str:
-    """The box-size question for the configured small box (inches)."""
-    sides = " x ".join(f"{side:g}" for side in dimensions)
-    if len(set(dimensions)) == 1:
-        rule = f"no side longer than {dimensions[0]:g} inches"
-    else:
-        rule = "each side no longer than the matching one"
-    return f"Does the box fit within {sides} inches ({rule})?"
+SMALL_BOX_QUESTION = (
+    "Is the box 1,728 cubic inches or less (length x width x height, each side "
+    "rounded up) with no side over 22 inches?"
+)
+
+SMALL_BOX_EXAMPLES = (
+    "  Box size: round each side UP to a whole inch, then multiply.",
+    "    Qualifies: 12x12x12, 18x12x8, 16x12x9, 20x10x8",
+    "    Doesn't:   14x12x11 (1,848 cubic inches), 24x10x7 (side over 22 inches)",
+    "  If you're not sure, answer No.",
+)
 
 
-def query_small_box(
-    weight: int, min_weight: int, dimensions: typing.Sequence[float]
-) -> typing.Optional[bool]:
-    """Ask whether a package of ``weight`` pounds fits in the small box.
+def query_small_box(weight: int, min_weight: int) -> typing.Optional[bool]:
+    """Ask whether a package of ``weight`` pounds is in a box of one cubic foot or less.
 
-    The small box (``dimensions``, from the config) is what gets declared on a
-    Yes, so every side must fit, not just the volume: a long, thin box can be
-    under one cubic foot but over USPS's 22-inch side limit, and USPS rounds
-    each side up before multiplying. Declaring the small box therefore never
-    understates any dimension.
+    The box qualifies when, with each side rounded up to the next whole inch
+    (as USPS measures), length x width x height is at most 1,728 cubic inches
+    and no side is over 22 inches. That is the loosest bound where declaring
+    the configured small box gives the same price as the real box: both are
+    priced by actual weight, and neither passes the 22-inch surcharge length.
 
     Returns False without asking below ``min_weight`` pounds, where the box size
     can't change the rate. Returns None if the volunteer cancels (Ctrl+C).
@@ -80,7 +81,9 @@ def query_small_box(
     """
     if weight < min_weight:
         return False
-    return questionary.confirm(small_box_question(dimensions), default=False).ask()
+    for line in SMALL_BOX_EXAMPLES:
+        questionary.print(line, style="fg:white")
+    return questionary.confirm(SMALL_BOX_QUESTION, default=False).ask()
 
 
 def query_request_id() -> (
