@@ -1,10 +1,13 @@
 """Run the application in a CLI."""
 
 import argparse
+import collections
 import configparser
 import contextlib
+import datetime
 import importlib.resources
 import pathlib
+import typing
 
 import easypost  # type: ignore
 import googlemaps  # type: ignore
@@ -15,32 +18,127 @@ from . import console, shipping
 from .misc import grab_png_from_url
 from .models import Config
 from .printing import print_image, snapshot_printer_state
-from .server import Server
+from .server import Server, ServerError, to_easypost_address
+
+
+def build_unit_choices(units: list[dict]) -> dict[str, tuple[str, str]]:
+    """Map uppercased display names to (jurisdiction, name) unit keys.
+
+    Unit names are only unique per jurisdiction, so the jurisdiction is
+    appended to the display name whenever a name is shared across
+    jurisdictions.
+    """
+    name_counts = collections.Counter(unit["name"].upper() for unit in units)
+
+    choices = {}
+    for unit in units:
+        key = unit["name"].upper()
+        if name_counts[key] > 1:
+            key = f"{key} ({unit['jurisdiction'].upper()})"
+        choices[key] = (unit["jurisdiction"], unit["name"])
+
+    return choices
 
 
 def generate_addresses_bulk(config: Config):
     """Generate addresses for bulk shipping."""
     server = Server.from_config(config.ibp)
 
-    with console.task_message("Grabbing units list from IBP server"):
-        units = server.unit_ids()
+    with console.task_message("Grabbing shipping settings from IBP server"):
+        recipient_name = server.shipping_settings()["unit_recipient_name"]
 
-    # Normalize unit names to uppercase.
-    units = {key.upper(): value for key, value in units.items()}
+    with console.task_message("Grabbing units list from IBP server"):
+        units = build_unit_choices(server.units())
 
     while True:
         unit = console.query_unit(units)
         if unit is None:
             continue
 
-        unit_id = units[unit]
-        to_addr = server.unit_address(unit_id)
+        jurisdiction, name = units[unit]
+        try:
+            with console.task_message("Grabbing unit address from IBP server"):
+                unit_data = server.unit(jurisdiction, name)
+        except ServerError as exc:
+            questionary.print(f"  {exc.detail}", style="fg:red")
+            continue
+
+        to_addr = to_easypost_address(recipient_name, unit_data)
 
         weight = console.query_weight()
         if weight is None:
             continue
 
         yield to_addr, weight
+
+
+STALE_UNIT_AGE = datetime.timedelta(days=90)
+"""How old an inmate's unit data can be before shippy warns it may be outdated."""
+
+
+def fetch_request_address(
+    server: Server, request_id: typing.Union[typing.Tuple[str, int, int], int]
+) -> dict[str, typing.Any]:
+    """Fetch the shipping address for a scanned request label."""
+    if isinstance(request_id, tuple):
+        # New-style label ID, e.g. "TEX-12345678-0".
+        jurisdiction, inmate_id, index = request_id
+        return server.inmate_request_address(jurisdiction, inmate_id, index)
+
+    # Legacy label ID: the bare request autoid.
+    return server.request_address(request_id)
+
+
+def unit_is_stale(
+    datetime_fetched: typing.Optional[str], now: datetime.datetime
+) -> bool:
+    """Whether an inmate's unit was last fetched too long ago (or never)."""
+    if not datetime_fetched:
+        return True
+
+    try:
+        fetched = datetime.datetime.fromisoformat(datetime_fetched)
+    except ValueError:
+        return True
+
+    if fetched.tzinfo is None:
+        fetched = fetched.replace(tzinfo=datetime.timezone.utc)
+
+    return now - fetched > STALE_UNIT_AGE
+
+
+def check_request_address(
+    address: dict[str, typing.Any],
+    now: typing.Optional[datetime.datetime] = None,
+) -> bool:
+    """Warn about a request's address; return whether to go ahead and ship.
+
+    A stale unit only warns. A tossed request needs explicit confirmation,
+    since it normally should not be shipped at all.
+    """
+    if now is None:
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+    questionary.print(
+        f"  Shipping to {address['name']} at {address['unit_name']}",
+        style="fg:white",
+    )
+
+    if unit_is_stale(address.get("datetime_fetched"), now):
+        questionary.print(
+            "  Warning: this inmate's unit has not been checked in over "
+            f"{STALE_UNIT_AGE.days} days and may be out of date.",
+            style="fg:yellow",
+        )
+
+    if address.get("action") == "Tossed":
+        questionary.print(
+            "  Warning: this request is marked TOSSED, not filled.",
+            style="fg:red bold",
+        )
+        return console.confirm_tossed()
+
+    return True
 
 
 def generate_addresses_individual(config: Config):
@@ -52,7 +150,18 @@ def generate_addresses_individual(config: Config):
         if request_id is None:
             continue
 
-        to_addr = server.request_address(request_id)
+        try:
+            with console.task_message("Grabbing address from IBP server"):
+                address = fetch_request_address(server, request_id)
+        except ServerError as exc:
+            questionary.print(f"  {exc.detail}", style="fg:red")
+            continue
+
+        if not check_request_address(address):
+            questionary.print("  Skipped; no postage bought.", style="fg:yellow")
+            continue
+
+        to_addr = to_easypost_address(address["name"], address)
 
         weight = console.query_weight()
         if weight is None:
@@ -148,7 +257,6 @@ def main():
     config = load_config(args.config)
 
     easypost_client = easypost.EasyPostClient(config.easypost.apikey)
-    server = Server.from_config(config.ibp)
 
     logo = load_logo()
 
@@ -158,7 +266,8 @@ def main():
     )
 
     with console.task_message("Grabbing return address from IBP server"):
-        from_addr = shipping.build_address(easypost_client, **server.return_address())
+        return_address = Server.from_config(config.ibp).return_address()
+        from_addr = shipping.build_address(easypost_client, **return_address)
 
     try:
         with console.task_message("Verifying return address"):
