@@ -52,6 +52,7 @@ def run_individual(config, request_ids, weights=(3,), confirm=False):
     with (
         mock.patch("shippy.cli.console.query_request_id", side_effect=request_ids),
         mock.patch("shippy.cli.console.query_weight", side_effect=list(weights)),
+        mock.patch("shippy.cli.console.query_small_box", return_value=False),
         mock.patch("shippy.cli.console.confirm_tossed", return_value=confirm) as ask,
     ):
         item = next(cli.generate_addresses_individual(config))
@@ -61,7 +62,7 @@ def run_individual(config, request_ids, weights=(3,), confirm=False):
 def test_individual_legacy_barcode(http, config, printed):
     """A legacy integer label is addressed via the by-request endpoint."""
     http.add("inmates/by-request/98765/address", request_address())
-    (to_addr, weight), ask = run_individual(config, [98765])
+    (to_addr, weight, _), ask = run_individual(config, [98765])
     assert to_addr == EXPECTED_INMATE_ADDRESS
     assert weight == 3
     assert http.calls == [f"{BASE_URL}/inmates/by-request/98765/address"]
@@ -73,7 +74,7 @@ def test_individual_new_barcode_passes_request_index(http, config, printed):
     """A TEX-ID-INDEX label uses the request-index address endpoint."""
     path = "inmates/Texas/12345/requests/4/address"
     http.add(path, request_address(request_index=4))
-    (to_addr, _), _ = run_individual(config, [("TEX", 12345, 4)])
+    (to_addr, _, _), _ = run_individual(config, [("TEX", 12345, 4)])
     assert to_addr == EXPECTED_INMATE_ADDRESS
     assert http.calls == [f"{BASE_URL}/{path}"]
     assert "Warning" not in printed_text(printed)
@@ -87,7 +88,7 @@ def test_individual_server_error_skips_to_next_label(
     detail = "Texas inmate #00012345 is not assigned to a unit; cannot address"
     http.add("inmates/by-request/1/address", {"detail": detail}, status_code)
     http.add("inmates/by-request/98765/address", request_address())
-    (to_addr, _), _ = run_individual(config, [1, 98765])
+    (to_addr, _, _), _ = run_individual(config, [1, 98765])
     assert to_addr == EXPECTED_INMATE_ADDRESS
     assert detail in printed_text(printed)
 
@@ -96,7 +97,7 @@ def test_individual_tossed_declined_skips(http, config, printed):
     """Declining a tossed request buys nothing and moves to the next label."""
     http.add("inmates/by-request/1/address", request_address(action="Tossed"))
     http.add("inmates/by-request/98765/address", request_address())
-    (to_addr, _), ask = run_individual(config, [1, 98765], confirm=False)
+    (to_addr, _, _), ask = run_individual(config, [1, 98765], confirm=False)
     assert to_addr == EXPECTED_INMATE_ADDRESS
     ask.assert_called_once()
     text = printed_text(printed)
@@ -107,7 +108,7 @@ def test_individual_tossed_declined_skips(http, config, printed):
 def test_individual_tossed_confirmed_ships(http, config, printed):
     """Confirming a tossed request lets it ship."""
     http.add("inmates/by-request/1/address", request_address(action="Tossed"))
-    (to_addr, _), ask = run_individual(config, [1], confirm=True)
+    (to_addr, _, _), ask = run_individual(config, [1], confirm=True)
     assert to_addr == EXPECTED_INMATE_ADDRESS
     ask.assert_called_once()
     assert "TOSSED" in printed_text(printed)
@@ -147,8 +148,9 @@ def test_bulk_uses_server_recipient_name(http, config, printed):
             "shippy.cli.console.query_unit", side_effect=["HUGHES (FEDERAL)"]
         ) as query_unit,
         mock.patch("shippy.cli.console.query_weight", side_effect=[20]),
+        mock.patch("shippy.cli.console.query_small_box", return_value=False),
     ):
-        to_addr, weight = next(cli.generate_addresses_bulk(config))
+        to_addr, weight, _ = next(cli.generate_addresses_bulk(config))
 
     assert set(query_unit.call_args.args[0]) == {"HUGHES (TEXAS)", "HUGHES (FEDERAL)"}
     assert to_addr == dict(EXPECTED_INMATE_ADDRESS, name="ATTN: MAILROOM STAFF")
@@ -166,8 +168,9 @@ def test_bulk_unit_not_found_skips(http, config, printed):
     with (
         mock.patch("shippy.cli.console.query_unit", side_effect=["GONE", "HUGHES"]),
         mock.patch("shippy.cli.console.query_weight", side_effect=[20]),
+        mock.patch("shippy.cli.console.query_small_box", return_value=False),
     ):
-        to_addr, _ = next(cli.generate_addresses_bulk(config))
+        to_addr, _, _ = next(cli.generate_addresses_bulk(config))
 
     assert to_addr["name"] == "ATTN: MAILROOM STAFF"
     assert "Unit not found." in printed_text(printed)

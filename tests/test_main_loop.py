@@ -59,8 +59,9 @@ class MainLoopTests(unittest.TestCase):
 
         server = mock.Mock()
         server.return_address.return_value = dict(ADDRESS)
-        server.unit_ids.return_value = {"Connally": 1}
-        server.unit_address.side_effect = lambda _id: dict(ADDRESS)
+        server.shipping_settings.return_value = {"unit_recipient_name": ADDRESS["name"]}
+        server.units.return_value = [{"jurisdiction": "Texas", "name": "Connally"}]
+        server.unit.side_effect = lambda _jurisdiction, _name: dict(ADDRESS)
 
         patches = [
             mock.patch(
