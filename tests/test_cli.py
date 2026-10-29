@@ -52,11 +52,21 @@ def run_individual(config, request_ids, weights=(3,), confirm=False):
     with (
         mock.patch("shippy.cli.console.query_request_id", side_effect=request_ids),
         mock.patch("shippy.cli.console.query_weight", side_effect=list(weights)),
-        mock.patch("shippy.cli.console.query_small_box", return_value=False),
+        mock.patch("shippy.cli.console.query_small_box") as box_question,
         mock.patch("shippy.cli.console.confirm_tossed", return_value=confirm) as ask,
     ):
         item = next(cli.generate_addresses_individual(config))
+    box_question.assert_not_called()
     return item, ask
+
+
+@pytest.mark.parametrize("weight", [1, 4, 12])
+def test_individual_always_declares_small_box(http, config, weight):
+    """Individual mode declares the small box at any weight, without asking."""
+    http.add("inmates/by-request/98765/address", request_address())
+    (_, got_weight, small_box), _ = run_individual(config, [98765], weights=[weight])
+    assert got_weight == weight
+    assert small_box is True
 
 
 def test_individual_legacy_barcode(http, config, printed):
