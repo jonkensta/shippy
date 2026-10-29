@@ -95,11 +95,10 @@ def generate_addresses_individual(config: Config):
         if weight is None:
             continue
 
-        small_box = console.query_small_box(weight, shipping.BOX_QUESTION_MIN_LB)
-        if small_box is None:
-            continue
-
-        yield to_addr, weight, small_box
+        # Individual packages always go in boxes of one cubic foot or less, so
+        # declare the small box without asking; Ground Advantage then competes
+        # with Library Mail on actual weight.
+        yield to_addr, weight, True
 
 
 def generate_addresses_manual(config: Config):

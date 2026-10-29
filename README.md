@@ -73,7 +73,9 @@ shippy --config path/to/your/config.ini <shipping_type>
 
 Replace `<shipping_type>` with one of the following commands:
 
-- `individual`: For shipping individual packages.
+- `individual`: For shipping individual packages. It doesn't ask about box
+  size: every individual package is declared as the small box (12x12x12, one
+  cubic foot), so pack individual requests in boxes no bigger than that.
 - `bulk`: For shipping bulk packages.
 - `manual`: For manually entering address details.
 
