@@ -43,21 +43,31 @@ To set up the `shippy` project for development, ensure you have [uv](https://git
 
 The application requires a configuration file for the internal IBP server and the EasyPost API.
 
-1.  Create a `config.ini` file.
-2.  Populate it with your API keys and server URL:
+1.  Create a `config.ini` file (see `sample.ini` for a full example).
+2.  Populate it with your API keys and the server URL:
 
     ```
     [ibp]
-    url = http://your_ibp_server_url:8000
-    apikey = your_ibp_api_key_here
+    url = http://192.168.1.156/api
 
     [easypost]
     apikey = your_easypost_api_key_here
+
+    [googlemaps]
+    apikey = your_googlemaps_api_key_here
     ```
 
-    - `ibp.url`: The URL of your internal IBP server.
-    - `ibp.apikey`: The API key for the IBP server.
+    - `ibp.url`: The base URL of the IBP backend API. The nginx-prefixed
+      form (`http://host/api`) and the direct form (`http://host:8000`)
+      both work. No IBP API key is needed; an old `apikey` line is ignored.
     - `easypost.apikey`: Your EasyPost API key.
+    - `googlemaps.apikey`: Your Google Maps API key (address autocompletion
+      in `manual` mode).
+
+    The return address and the recipient name for unit (bulk) shipments
+    (`ATTN: MAILROOM STAFF`) are not set in `config.ini`: shippy reads them
+    from the server's `/shipping-settings`, which volunteers can edit in the
+    IBP web app.
 
 ## Usage
 
@@ -73,9 +83,12 @@ shippy --config path/to/your/config.ini <shipping_type>
 
 Replace `<shipping_type>` with one of the following commands:
 
-- `individual`: For shipping individual packages. It doesn't ask about box
-  size: every individual package is declared as the small box (12x12x12, one
-  cubic foot), so pack individual requests in boxes no bigger than that.
+- `individual`: For shipping individual packages. Scan the request label
+  (new `TEX-12345678-0` style or a legacy number). shippy warns if the
+  inmate's unit may be out of date, and asks for confirmation before buying
+  postage for a request marked tossed. It doesn't ask about box size: every
+  individual package is declared as the small box (12x12x12, one cubic foot),
+  so pack individual requests in boxes no bigger than that.
 - `bulk`: For shipping bulk packages.
 - `manual`: For manually entering address details.
 

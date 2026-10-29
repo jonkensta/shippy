@@ -11,10 +11,14 @@ MAX_SIDE_IN = 22.0
 
 
 class IbpConfig(BaseModel):
-    """Model for IBP configuration."""
+    """Model for IBP configuration.
+
+    The new IBP FastAPI backend does not use API keys, so only the base URL
+    is needed. The return address and unit recipient name come from the
+    server's ``/shipping-settings`` endpoint, not from this config.
+    """
 
     url: HttpUrl
-    apikey: str
 
 
 class EasypostConfig(BaseModel):

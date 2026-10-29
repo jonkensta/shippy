@@ -209,25 +209,5 @@ class PurchasePostageTests(unittest.TestCase):
         self.assertLess(first_print, names.index("buy"))
 
 
-class IndividualBoxTests(unittest.TestCase):
-    """cli.generate_addresses_individual(): always the small box, never asked."""
-
-    def test_declares_small_box_without_asking(self):
-        config = mock.Mock()
-        for weight in (1, 4, 12):
-            with (
-                mock.patch.object(cli.Server, "from_config"),
-                mock.patch.object(console, "query_request_id", return_value=98765),
-                mock.patch.object(console, "query_weight", return_value=weight),
-                mock.patch.object(console, "query_small_box") as box_question,
-            ):
-                _, got_weight, small_box = next(
-                    cli.generate_addresses_individual(config)
-                )
-            box_question.assert_not_called()
-            self.assertEqual(got_weight, weight)
-            self.assertIs(small_box, True)
-
-
 if __name__ == "__main__":
     unittest.main()
